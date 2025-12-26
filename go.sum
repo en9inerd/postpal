@@ -1,2 +1,2 @@
-# This file will be generated when you run 'go mod tidy'
-# Placeholder file - delete this and run 'go mod tidy' after customizing
+github.com/en9inerd/go-pkgs v0.1.2 h1:vBZ6ZrKleo5kpU6QZtroB12XPJ1ONDbLYuIHH21ot+o=
+github.com/en9inerd/go-pkgs v0.1.2/go.mod h1:KNW9erkD4zgghgcd3y4V8DmQECv2DCOldpc6y2PW7pE=

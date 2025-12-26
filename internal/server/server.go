@@ -9,8 +9,8 @@ import (
 
 	"github.com/en9inerd/go-pkgs/middleware"
 	"github.com/en9inerd/go-pkgs/router"
-	"github.com/yourusername/yourproject/internal/config"
-	"github.com/yourusername/yourproject/ui"
+	"github.com/en9inerd/postpal/internal/config"
+	"github.com/en9inerd/postpal/ui"
 )
 
 // SecurityHeaders adds security headers to responses

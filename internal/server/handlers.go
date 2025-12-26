@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/en9inerd/go-pkgs/httpjson"
-	"github.com/yourusername/yourproject/internal/config"
+	"github.com/en9inerd/postpal/internal/config"
 )
 
 // Example handler - replace with your own handlers

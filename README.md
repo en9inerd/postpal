@@ -1,16 +1,20 @@
-# Go Web Application Template
+# PostPal
 
-This is a starter template for building web applications in Go. It includes the common pieces you'll need for a production-ready application, so you can focus on building your features instead of setting up infrastructure.
+> **⚠️ Under Development** - This project is currently under active development and may have incomplete features or breaking changes.
 
-## What's Included
+PostPal is a Go service that publishes posts to configured Telegram channels using a Telegram bot. It's designed to work as part of a Zola static website publishing workflow, allowing you to automatically share your blog posts or content to Telegram channels when your site is built or updated.
 
-The template comes with a clean project structure that separates your application code from infrastructure concerns. You get an HTTP server with graceful shutdown, structured logging, configuration management, request validation utilities, security headers middleware, Docker support, and CI/CD workflows.
+## Features
 
-The project follows a standard Go layout with your application entry point in `cmd/app`, internal packages in `internal`, and UI assets in `ui`.
+- **Telegram Channel Publishing**: Automatically publish posts to configured Telegram channels using a bot
+- **Zola Integration**: Designed to work seamlessly with Zola static site generator workflows
+- **Robust Error Handling**: Automatic retry logic for transient failures
+- **Request Validation**: Built-in validation for all Telegram API requests
+- **Structured Logging**: Comprehensive logging for debugging and monitoring
+- **HTTP API**: RESTful API for programmatic control
+- **Security**: Request size limits, throttling, and security headers
 
 ## Project Structure
-
-Here's how the project is organized:
 
 ```
 .
@@ -21,6 +25,7 @@ Here's how the project is organized:
 │   ├── config/           # Configuration parsing
 │   ├── log/              # Logging utilities
 │   ├── server/           # HTTP server setup and handlers
+│   ├── telegram/         # Telegram Bot API client
 │   └── validator/        # Validation utilities
 ├── ui/
 │   ├── static/           # Static assets (CSS, JS)
@@ -36,117 +41,143 @@ Here's how the project is organized:
 
 ## Getting Started
 
-### Step 1: Copy the Template
+### Prerequisites
 
-First, copy this template to wherever you want your new project to live:
+- Go 1.25.1 or later
+- A Telegram Bot Token (get one from [@BotFather](https://t.me/botfather))
+- A Telegram channel where your bot is an administrator
 
+### Installation
+
+1. Clone the repository:
 ```bash
-cp -r go-template /path/to/your-new-project
-cd /path/to/your-new-project
+git clone https://github.com/en9inerd/postpal.git
+cd postpal
 ```
 
-### Step 2: Update the Module Name
-
-You'll need to replace the placeholder module name with your actual module path. The template uses `github.com/yourusername/yourproject` as a placeholder.
-
-Update `go.mod` first, then update all the import statements in your Go files. You can do this with find and replace in your editor, or use sed if you prefer:
-
+2. Install dependencies:
 ```bash
-# Update go.mod
-sed -i '' 's|github.com/yourusername/yourproject|github.com/yourusername/yourproject|g' go.mod
-
-# Update all Go files
-find . -name "*.go" -type f -exec sed -i '' 's|github.com/yourusername/yourproject|github.com/yourusername/yourproject|g' {} +
+go mod download
 ```
 
-### Step 3: Customize Your Configuration
-
-Open `internal/config/config.go` and add the configuration fields your application needs. The template includes a basic `Port` field, but you'll likely want to add things like database URLs, API keys, timeouts, and other settings.
-
-```go
-type Config struct {
-    Port        string
-    DatabaseURL string
-    APIKey      string
-    // Add your fields here
-}
-```
-
-### Step 4: Add Your Handlers
-
-The template includes a basic server setup, but you'll need to add your own routes and handlers. Edit `internal/server/server.go` and `internal/server/handlers.go` to add your application logic.
-
-For example, you might add routes like this:
-
-```go
-// In registerAPIRoutes
-apiGroup.HandleFunc("GET /users", getUsersHandler(logger, cfg))
-apiGroup.HandleFunc("POST /users", createUserHandler(logger, cfg))
-```
-
-### Step 5: Initialize Go Modules
-
-Once you've updated the module name, run:
-
+3. Build the application:
 ```bash
-go mod tidy
-```
-
-This will download dependencies and update your go.mod file.
-
-### Step 6: Build and Run
-
-You can build the application using the Makefile:
-
-```bash
-# Build
 make build
+```
 
-# Run
-./dist/yourproject --port 8000 --verbose
+### Configuration
+
+PostPal can be configured via command-line flags or environment variables. Flags take precedence over environment variables.
+
+**Required Configuration:**
+- `--telegram-token` or `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
+
+**Optional Configuration:**
+- `--port` or `APP_PORT`: Server port (default: `8000`)
+- `--verbose` or `-v`: Enable verbose logging
+
+### Running
+
+```bash
+# Using command-line flags
+./dist/postpal --telegram-token YOUR_BOT_TOKEN --port 8000 --verbose
+
+# Using environment variables
+TELEGRAM_BOT_TOKEN=YOUR_BOT_TOKEN APP_PORT=8000 ./dist/postpal --verbose
 
 # Or run directly during development
-go run ./cmd/app --port 8000 --verbose
+go run ./cmd/app --telegram-token YOUR_BOT_TOKEN --verbose
 ```
+
+## Usage
+
+### Telegram Bot Setup
+
+1. Create a bot with [@BotFather](https://t.me/botfather) on Telegram
+2. Get your bot token
+3. Add the bot as an administrator to your Telegram channel
+4. Configure PostPal with your bot token
+
+### Publishing Posts
+
+PostPal provides a Telegram Bot API client for publishing posts to channels. The client supports:
+
+- **Send Message**: Send text messages to channels
+- **Edit Message Text**: Edit the text of existing messages
+- **Edit Message Caption**: Edit captions of media messages
+- **Edit Message Media**: Edit media content of messages
+- **Delete Message**: Delete messages from channels
+- **Forward Message**: Forward messages between channels
+- **Copy Message**: Copy messages to channels
+- **Pin Chat Message**: Pin messages in channels
+- **Unpin Chat Message**: Unpin specific or all messages in channels
+
+See the [Telegram package documentation](internal/telegram/README.md) for detailed usage examples.
+
+### Zola Integration
+
+PostPal is designed to integrate with Zola static site generation workflows. You can:
+
+1. Set up a webhook or API endpoint that Zola calls after building
+2. Use PostPal's HTTP API to publish posts when your site is updated
+3. Automate the publishing process as part of your CI/CD pipeline
+
+Example workflow:
+```bash
+# Build your Zola site
+zola build
+
+# Publish to Telegram via PostPal API
+curl -X POST http://localhost:8000/api/publish \
+  -H "Content-Type: application/json" \
+  -d '{"channel": "@your_channel", "text": "New post published!"}'
+```
+
+## API Endpoints
+
+The HTTP API provides endpoints for programmatic control:
+
+- `GET /health` - Health check endpoint
+- `POST /api/publish` - Publish a post to a Telegram channel (coming soon)
 
 ## Features
 
 ### Configuration
 
-The configuration system supports both command-line flags and environment variables. Flags take precedence, but environment variables are useful for deployment scenarios.
-
-You can set the port either way:
+The configuration system supports both command-line flags and environment variables:
 
 ```bash
 # Via flag
-./app --port 8080
+./postpal --port 8080 --telegram-token YOUR_TOKEN
 
 # Via environment variable
-APP_PORT=8080 ./app
+APP_PORT=8080 TELEGRAM_BOT_TOKEN=YOUR_TOKEN ./postpal
 ```
 
 ### Logging
 
-Logging is controlled by the `--verbose` or `-v` flag. When verbose mode is enabled, you'll see debug-level logs. Without it, only errors are logged.
+Logging is controlled by the `--verbose` or `-v` flag:
 
 ```bash
 # Verbose logging (debug level)
-./app --verbose
+./postpal --verbose
 
 # Silent mode (errors only)
-./app
+./postpal
 ```
 
 ### Docker
 
-The template includes Docker support for containerized deployments. You can build and run the application in Docker:
+PostPal includes Docker support for containerized deployments:
 
 ```bash
 # Build
-docker build -t yourproject:latest .
+docker build -t postpal:latest .
 
 # Run
-docker run -p 8000:8000 yourproject:latest
+docker run -p 8000:8000 \
+  -e TELEGRAM_BOT_TOKEN=YOUR_TOKEN \
+  postpal:latest
 
 # Or use docker-compose
 docker-compose up
@@ -154,7 +185,7 @@ docker-compose up
 
 ### Multi-Architecture Builds
 
-If you need to build for multiple platforms, use the production build target:
+Build for multiple platforms:
 
 ```bash
 make build-prod
@@ -164,23 +195,7 @@ This creates binaries in the `dist/` directory for:
 - Linux (amd64, arm64)
 - macOS (amd64, arm64)
 
-### CI/CD
-
-The template includes a GitHub Actions workflow that handles semantic versioning and Docker builds. It automatically determines version bumps based on your commit messages and builds Docker images when you create a release.
-
-The workflow uses semantic versioning based on commit message prefixes:
-- `feat:` - Minor version bump
-- `fix:` - Patch version bump
-- `feat!:` or `BREAKING CHANGE:` - Major version bump
-- `chore:` - No release (Docker build is skipped)
-
-To use the CI/CD workflow, you'll need to set up these secrets in your GitHub repository:
-- `DOCKERHUB_USERNAME` - Your Docker Hub username
-- `DOCKERHUB_TOKEN` - Your Docker Hub access token
-
 ## Makefile Targets
-
-The Makefile includes several common tasks:
 
 - `make build` - Build binary locally
 - `make build-prod` - Build for multiple platforms
@@ -191,69 +206,31 @@ The Makefile includes several common tasks:
 - `make docker-clean` - Clean up Docker resources
 - `make docker-clean-all` - Clean Docker resources and build cache
 
-## UI Templates
-
-The template includes a basic HTML template structure that you can use if you're building a web application with server-rendered pages. The templates are in `ui/templates/` and static assets go in `ui/static/`.
-
-To use the templates, you'll need to uncomment the embed directive in `ui/efs.go`:
-
-```go
-//go:embed "templates/*" "static/*"
-var Files embed.FS
-```
-
-Then you can use the template cache in your handlers. There's an example in `internal/server/server.go` that shows how to set this up.
-
-## Validation
-
-The `internal/validator` package provides utilities for validating request data. You can embed the validator in your request structs and implement a `Validate` method:
-
-```go
-import "github.com/yourusername/yourproject/internal/validator"
-
-type UserRequest struct {
-    Email string `json:"email"`
-    validator.Validator
-}
-
-func (r *UserRequest) Validate(v *validator.Validator) {
-    v.CheckField(validator.NotBlank(r.Email), "email", "email is required")
-    v.CheckField(validator.Matches(r.Email, emailRegex), "email", "invalid email format")
-}
-```
-
 ## Security
 
-The template includes several security features out of the box:
+PostPal includes several security features:
+
 - Security headers middleware (CSP, X-Frame-Options, etc.)
-- Request throttling
-- Request size limits
+- Request throttling (1000 concurrent requests)
+- Request size limits (10MB max)
 - Graceful shutdown
 - Health check endpoint
 
-You can customize these in `internal/server/middleware.go` and `internal/server/server.go`.
-
 ## Dependencies
 
-The template uses `github.com/en9inerd/go-pkgs` for router and middleware utilities. If you prefer a different router or middleware library, you can replace it. The code is structured to make this straightforward.
+PostPal uses:
+- `github.com/en9inerd/go-pkgs` - Router, middleware, HTTP client, and validation utilities
 
-## Customization Checklist
+## Development
 
-Before you start building, here's a checklist of things to customize:
+### Project Status
 
-- Update module name in `go.mod` and all Go files
-- Add your configuration fields in `internal/config/config.go`
-- Implement your handlers in `internal/server/handlers.go`
-- Register your routes in `internal/server/server.go`
-- Update Docker image name in `.github/workflows/release-and-docker.yml`
-- Customize UI templates in `ui/templates/` if you're using them
-- Add your static assets to `ui/static/` if needed
-- Update `.env.example` with your environment variables
-- Update `docker-compose.yml` with your service configuration
-- Add any additional dependencies: `go get <package>`
-- Write tests for your handlers
-- Update this README with your project-specific information
+⚠️ **This project is under active development.** Features may be incomplete, and breaking changes may occur.
+
+### Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This template is provided as-is. Feel free to customize it for your needs.
+This project is provided as-is. Feel free to use and modify for your needs.

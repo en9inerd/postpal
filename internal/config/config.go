@@ -2,12 +2,12 @@ package config
 
 import (
 	"flag"
-	"strconv"
 )
 
 // Config holds application configuration
 type Config struct {
-	Port string
+	Port         string
+	TelegramToken string // Telegram Bot API token
 	// Add your application-specific config fields here
 	// Example:
 	// DatabaseURL string
@@ -24,18 +24,10 @@ func ParseConfig(args []string, getenv func(string) string) (*Config, error) {
 		return fallback
 	}
 
-	getEnvInt := func(key string, fallback int) int {
-		if v := getenv(key); v != "" {
-			if i, err := strconv.Atoi(v); err == nil {
-				return i
-			}
-		}
-		return fallback
-	}
-
 	fs := flag.NewFlagSet("app", flag.ContinueOnError)
 
 	port := fs.String("port", getEnv("APP_PORT", "8000"), "Port to listen on")
+	telegramToken := fs.String("telegram-token", getEnv("TELEGRAM_BOT_TOKEN", ""), "Telegram Bot API token")
 	// Add your application-specific flags here
 	// Example:
 	// databaseURL := fs.String("database-url", getEnv("DATABASE_URL", ""), "Database connection URL")
@@ -46,7 +38,8 @@ func ParseConfig(args []string, getenv func(string) string) (*Config, error) {
 	}
 
 	return &Config{
-		Port: *port,
+		Port:          *port,
+		TelegramToken: *telegramToken,
 		// Add your application-specific config assignments here
 		// Example:
 		// DatabaseURL: *databaseURL,

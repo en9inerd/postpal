@@ -1,12 +1,12 @@
 package server
 
 import (
-	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/en9inerd/go-pkgs/httperrors"
 	"github.com/en9inerd/go-pkgs/middleware"
 	"github.com/en9inerd/go-pkgs/router"
 	"github.com/en9inerd/postpal/internal/config"
@@ -34,6 +34,7 @@ func NewServer(
 	r.Use(
 		SecurityHeaders,
 		middleware.RealIP,
+		middleware.SizeLimit(10*1024*1024), // 10MB limit to prevent DoS attacks
 		middleware.Recoverer(logger, false),
 		middleware.GlobalThrottle(1000),
 		middleware.Timeout(60*time.Second),
@@ -91,7 +92,10 @@ func registerWebRoutes(
 func notFoundHandler(logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logger.Warn("not found", "path", r.URL.Path)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, "Not Found")
+		httpErr := httperrors.NewError(
+			http.StatusNotFound,
+			"Resource not found",
+		)
+		httpErr.WriteJSON(w)
 	}
 }

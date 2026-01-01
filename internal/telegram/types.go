@@ -33,20 +33,20 @@ type User struct {
 }
 
 // APIResponse represents a generic Telegram API response
-// Result is a generic interface{} to handle different response types
+// Result is a generic "any" to handle different response types
 // (Message for most operations, bool for delete/pin operations, etc.)
 type APIResponse struct {
-	OK          bool        `json:"ok"`
-	Description string      `json:"description,omitempty"`
-	ErrorCode   int         `json:"error_code,omitempty"`
-	Result      interface{} `json:"result,omitempty"`
+	OK          bool   `json:"ok"`
+	Description string `json:"description,omitempty"`
+	ErrorCode   int    `json:"error_code,omitempty"`
+	Result      any    `json:"result,omitempty"`
 }
 
 // SendMessageRequest represents a request to send a message
 type SendMessageRequest struct {
-	ChatID                string `json:"chat_id"`                          // Channel username (e.g., "@channel") or ID
-	Text                  string `json:"text"`                             // Message text
-	ParseMode             string `json:"parse_mode,omitempty"`             // "HTML", "Markdown", "MarkdownV2"
+	ChatID                string `json:"chat_id"`              // Channel username (e.g., "@channel") or ID
+	Text                  string `json:"text"`                 // Message text
+	ParseMode             string `json:"parse_mode,omitempty"` // "HTML", "Markdown", "MarkdownV2"
 	DisableWebPagePreview bool   `json:"disable_web_page_preview,omitempty"`
 	DisableNotification   bool   `json:"disable_notification,omitempty"`
 	ReplyToMessageID      int64  `json:"reply_to_message_id,omitempty"`
@@ -64,12 +64,12 @@ func (r *SendMessageRequest) Validate(v *validator.Validator) {
 
 // EditMessageTextRequest represents a request to edit message text
 type EditMessageTextRequest struct {
-	ChatID                string `json:"chat_id"`                          // Channel username or ID
-	MessageID             int64  `json:"message_id"`                       // Message ID to edit
-	Text                  string `json:"text"`                             // New text
-	ParseMode             string `json:"parse_mode,omitempty"`             // "HTML", "Markdown", "MarkdownV2"
+	ChatID                string `json:"chat_id"`              // Channel username or ID
+	MessageID             int64  `json:"message_id"`           // Message ID to edit
+	Text                  string `json:"text"`                 // New text
+	ParseMode             string `json:"parse_mode,omitempty"` // "HTML", "Markdown", "MarkdownV2"
 	DisableWebPagePreview bool   `json:"disable_web_page_preview,omitempty"`
-	InlineMessageID       string `json:"inline_message_id,omitempty"`      // For inline messages
+	InlineMessageID       string `json:"inline_message_id,omitempty"` // For inline messages
 }
 
 // Validate validates the EditMessageTextRequest
@@ -87,10 +87,10 @@ func (r *EditMessageTextRequest) Validate(v *validator.Validator) {
 
 // EditMessageCaptionRequest represents a request to edit message caption
 type EditMessageCaptionRequest struct {
-	ChatID          string `json:"chat_id"`                    // Channel username or ID
-	MessageID       int64  `json:"message_id"`                 // Message ID to edit
-	Caption         string `json:"caption,omitempty"`          // New caption
-	ParseMode       string `json:"parse_mode,omitempty"`       // "HTML", "Markdown", "MarkdownV2"
+	ChatID          string `json:"chat_id"`                     // Channel username or ID
+	MessageID       int64  `json:"message_id"`                  // Message ID to edit
+	Caption         string `json:"caption,omitempty"`           // New caption
+	ParseMode       string `json:"parse_mode,omitempty"`        // "HTML", "Markdown", "MarkdownV2"
 	InlineMessageID string `json:"inline_message_id,omitempty"` // For inline messages
 }
 
@@ -107,10 +107,10 @@ func (r *EditMessageCaptionRequest) Validate(v *validator.Validator) {
 
 // EditMessageMediaRequest represents a request to edit message media
 type EditMessageMediaRequest struct {
-	ChatID          string      `json:"chat_id"`                    // Channel username or ID
-	MessageID       int64       `json:"message_id"`                 // Message ID to edit
-	Media           interface{} `json:"media"`                       // InputMedia object
-	InlineMessageID string      `json:"inline_message_id,omitempty"` // For inline messages
+	ChatID          string `json:"chat_id"`                     // Channel username or ID
+	MessageID       int64  `json:"message_id"`                  // Message ID to edit
+	Media           any    `json:"media"`                       // InputMedia object
+	InlineMessageID string `json:"inline_message_id,omitempty"` // For inline messages
 }
 
 // DeleteMessageRequest represents a request to delete a message
@@ -127,9 +127,9 @@ func (r *DeleteMessageRequest) Validate(v *validator.Validator) {
 
 // ForwardMessageRequest represents a request to forward a message
 type ForwardMessageRequest struct {
-	ChatID              string `json:"chat_id"`                          // Target channel username or ID
-	FromChatID          string `json:"from_chat_id"`                     // Source channel username or ID
-	MessageID           int64  `json:"message_id"`                       // Message ID to forward
+	ChatID              string `json:"chat_id"`      // Target channel username or ID
+	FromChatID          string `json:"from_chat_id"` // Source channel username or ID
+	MessageID           int64  `json:"message_id"`   // Message ID to forward
 	DisableNotification bool   `json:"disable_notification,omitempty"`
 }
 
@@ -142,13 +142,13 @@ func (r *ForwardMessageRequest) Validate(v *validator.Validator) {
 
 // CopyMessageRequest represents a request to copy a message
 type CopyMessageRequest struct {
-	ChatID                string `json:"chat_id"`                          // Target channel username or ID
-	FromChatID            string `json:"from_chat_id"`                     // Source channel username or ID
-	MessageID             int64  `json:"message_id"`                       // Message ID to copy
-	Caption               string `json:"caption,omitempty"`                // New caption (optional)
-	ParseMode             string `json:"parse_mode,omitempty"`            // "HTML", "Markdown", "MarkdownV2"
-	DisableNotification   bool   `json:"disable_notification,omitempty"`
-	ReplyToMessageID      int64  `json:"reply_to_message_id,omitempty"`
+	ChatID              string `json:"chat_id"`              // Target channel username or ID
+	FromChatID          string `json:"from_chat_id"`         // Source channel username or ID
+	MessageID           int64  `json:"message_id"`           // Message ID to copy
+	Caption             string `json:"caption,omitempty"`    // New caption (optional)
+	ParseMode           string `json:"parse_mode,omitempty"` // "HTML", "Markdown", "MarkdownV2"
+	DisableNotification bool   `json:"disable_notification,omitempty"`
+	ReplyToMessageID    int64  `json:"reply_to_message_id,omitempty"`
 }
 
 // Validate validates the CopyMessageRequest
@@ -163,8 +163,8 @@ func (r *CopyMessageRequest) Validate(v *validator.Validator) {
 
 // PinChatMessageRequest represents a request to pin a message
 type PinChatMessageRequest struct {
-	ChatID              string `json:"chat_id"`                          // Channel username or ID
-	MessageID           int64  `json:"message_id"`                       // Message ID to pin
+	ChatID              string `json:"chat_id"`    // Channel username or ID
+	MessageID           int64  `json:"message_id"` // Message ID to pin
 	DisableNotification bool   `json:"disable_notification,omitempty"`
 }
 

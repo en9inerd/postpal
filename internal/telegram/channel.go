@@ -5,8 +5,8 @@ import (
 	"fmt"
 )
 
-// parseMessageResult parses the Result interface{} into a Message
-func parseMessageResult(result interface{}) (*Message, error) {
+// parseMessageResult parses the Result "any" into a Message
+func parseMessageResult(result any) (*Message, error) {
 	if result == nil {
 		return nil, fmt.Errorf("result is nil")
 	}

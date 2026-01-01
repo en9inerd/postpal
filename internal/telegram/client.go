@@ -35,7 +35,7 @@ func NewClient(botToken string, logger *slog.Logger) *Client {
 		httpClient: httpclient.New().
 			WithBaseURL(baseURL).
 			WithLogger(logger).
-			WithTimeout(30 * time.Second).
+			WithTimeout(30*time.Second).
 			WithHeader("Content-Type", "application/json"),
 		botToken: botToken,
 		logger:   logger,
@@ -55,7 +55,7 @@ func (c *Client) WithTimeout(timeout time.Duration) *Client {
 }
 
 // validateRequest validates a request if it implements the Validatable interface
-func (c *Client) validateRequest(req interface{}) error {
+func (c *Client) validateRequest(req any) error {
 	if validatable, ok := req.(validator.Validatable); ok {
 		v := &validator.Validator{}
 		validatable.Validate(v)
@@ -67,7 +67,7 @@ func (c *Client) validateRequest(req interface{}) error {
 }
 
 // makeRequest makes an HTTP request to the Telegram Bot API with retry logic
-func (c *Client) makeRequest(method string, payload interface{}) (*APIResponse, error) {
+func (c *Client) makeRequest(method string, payload any) (*APIResponse, error) {
 	// Validate request if it's validatable
 	if err := c.validateRequest(payload); err != nil {
 		return nil, err

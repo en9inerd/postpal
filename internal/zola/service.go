@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -192,9 +192,7 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 
 // DeletePost deletes one or more posts (comma-separated IDs)
 func (s *Service) DeletePost(ctx context.Context, ids string) error {
-	idList := strings.Split(ids, ",")
-
-	for _, idStr := range idList {
+	for idStr := range strings.SplitSeq(ids, ",") {
 		idStr = strings.TrimSpace(idStr)
 		if idStr == "" {
 			continue
@@ -310,9 +308,7 @@ func (s *Service) getPostImageNames(postID int64) ([]string, error) {
 		}
 	}
 
-	sort.Slice(imageNames, func(i, j int) bool {
-		return imageNames[i] < imageNames[j]
-	})
+	slices.Sort(imageNames)
 
 	return imageNames, nil
 }

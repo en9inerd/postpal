@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -394,14 +395,7 @@ func TestService_getPostImageNames(t *testing.T) {
 	}
 
 	for _, expected := range images {
-		found := false
-		for _, name := range imageNames {
-			if name == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(imageNames, expected) {
 			t.Errorf("expected image '%s' to be found", expected)
 		}
 	}

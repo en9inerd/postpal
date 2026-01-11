@@ -35,4 +35,7 @@ docker-clean-all: docker-clean
 	@docker builder prune -f
 	@echo "Docker cleanup complete (including build cache)"
 
-.PHONY: all build build-prod clean format test docker-build docker-clean docker-clean-all
+run:
+	@test -f .env && set -a && . ./.env && set +a; $(GO) run ./cmd/app
+
+.PHONY: all build build-prod clean format test run docker-build docker-clean docker-clean-all

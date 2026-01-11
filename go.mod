@@ -5,6 +5,7 @@ go 1.25.1
 require (
 	github.com/en9inerd/go-pkgs v0.2.0
 	github.com/go-git/go-git/v6 v6.0.0-20251231065035-29ae690a9f19
+	golang.org/x/crypto v0.46.0
 )
 
 require (
@@ -20,7 +21,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 )

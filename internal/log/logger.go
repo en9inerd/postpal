@@ -1,25 +1,21 @@
 package log
 
 import (
-	"io"
 	"log/slog"
 	"os"
 )
 
-// NewLogger returns a logger that only emits logs when verbose is true.
+// NewLogger returns a logger that emits logs at INFO level by default, or DEBUG when verbose is true.
 func NewLogger(verbose bool) *slog.Logger {
-	var out io.Writer
 	var level slog.Level
 
 	if verbose {
-		out = os.Stderr
 		level = slog.LevelDebug
 	} else {
-		out = io.Discard
-		level = slog.LevelError
+		level = slog.LevelInfo
 	}
 
-	handler := slog.NewTextHandler(out, &slog.HandlerOptions{
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: level,
 	})
 	return slog.New(handler)

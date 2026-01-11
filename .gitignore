@@ -94,3 +94,8 @@ tags
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,go,vim,git
 dist
+bin
+
+# Environment files
+.env
+.env.local

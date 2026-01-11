@@ -283,9 +283,9 @@ date = 2024-03-01T12:00:00Z
 func TestBuildFrontMatter_EmptyImages(t *testing.T) {
 	post := Post{
 		ID:         999,
-		Title:     "No Images",
-		Content:   "Content",
-		Date:      time.Date(2024, 4, 10, 8, 0, 0, 0, time.UTC),
+		Title:      "No Images",
+		Content:    "Content",
+		Date:       time.Date(2024, 4, 10, 8, 0, 0, 0, time.UTC),
 		ImageNames: []string{},
 	}
 	result := BuildFrontMatter(post)

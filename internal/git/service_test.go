@@ -1,7 +1,7 @@
 package git
 
 import (
-	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +10,17 @@ import (
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing/object"
 )
+
+func setupTestService(t *testing.T) (*Service, string) {
+	t.Helper()
+	tempDir := t.TempDir()
+	_, err := git.PlainInit(tempDir, false)
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+	svc := NewService(tempDir, "https://github.com/test/repo.git", "main", "token", Author{Name: "Test", Email: "test@example.com"}, slog.Default())
+	return svc, tempDir
+}
 
 func TestService_RepoExists(t *testing.T) {
 	tempDir := t.TempDir()
@@ -20,6 +31,7 @@ func TestService_RepoExists(t *testing.T) {
 		"main",
 		"token",
 		Author{Name: "Test", Email: "test@example.com"},
+		slog.Default(),
 	)
 
 	// Should not exist initially (directory exists but not a git repo)
@@ -47,21 +59,7 @@ func TestService_RepoExists(t *testing.T) {
 }
 
 func TestService_Open(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Create a git repo
-	_, err := git.PlainInit(tempDir, false)
-	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
-	}
-
-	service := NewService(
-		tempDir,
-		"https://github.com/test/repo.git",
-		"main",
-		"token",
-		Author{Name: "Test", Email: "test@example.com"},
-	)
+	service, _ := setupTestService(t)
 
 	repo, err := service.Open()
 	if err != nil {
@@ -82,6 +80,7 @@ func TestService_Open_NonExistent(t *testing.T) {
 		"main",
 		"token",
 		Author{Name: "Test", Email: "test@example.com"},
+		slog.Default(),
 	)
 
 	_, err := service.Open()
@@ -105,6 +104,7 @@ func TestService_AssignAuthor(t *testing.T) {
 		"main",
 		"token",
 		Author{Name: "Test User", Email: "test@example.com"},
+		slog.Default(),
 	)
 
 	err = service.AssignAuthor()
@@ -133,30 +133,14 @@ func TestService_AssignAuthor(t *testing.T) {
 }
 
 func TestService_Add_SingleFile(t *testing.T) {
-	tempDir := t.TempDir()
+	service, tempDir := setupTestService(t)
 
-	// Create a git repo
-	_, err := git.PlainInit(tempDir, false)
-	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
-	}
-
-	service := NewService(
-		tempDir,
-		"https://github.com/test/repo.git",
-		"main",
-		"token",
-		Author{Name: "Test", Email: "test@example.com"},
-	)
-
-	// Create a test file
 	testFile := filepath.Join(tempDir, "test.txt")
-	err = os.WriteFile(testFile, []byte("test content"), 0644)
+	err := os.WriteFile(testFile, []byte("test content"), 0644)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	// Add file using relative path
 	err = service.Add("test.txt")
 	if err != nil {
 		t.Fatalf("failed to add file: %v", err)
@@ -184,34 +168,17 @@ func TestService_Add_SingleFile(t *testing.T) {
 }
 
 func TestService_Add_MultipleFiles(t *testing.T) {
-	tempDir := t.TempDir()
+	service, tempDir := setupTestService(t)
 
-	// Create a git repo
-	_, err := git.PlainInit(tempDir, false)
-	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
-	}
-
-	service := NewService(
-		tempDir,
-		"https://github.com/test/repo.git",
-		"main",
-		"token",
-		Author{Name: "Test", Email: "test@example.com"},
-	)
-
-	// Create multiple test files
 	files := []string{"test1.txt", "test2.txt", "test3.txt"}
 	for _, filename := range files {
 		testFile := filepath.Join(tempDir, filename)
-		err = os.WriteFile(testFile, []byte("test content"), 0644)
-		if err != nil {
+		if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
 			t.Fatalf("failed to create test file: %v", err)
 		}
 	}
 
-	// Add multiple files at once using variadic arguments
-	err = service.Add(files...)
+	err := service.Add(files...)
 	if err != nil {
 		t.Fatalf("failed to add files: %v", err)
 	}
@@ -240,30 +207,14 @@ func TestService_Add_MultipleFiles(t *testing.T) {
 }
 
 func TestService_Add_AbsolutePath(t *testing.T) {
-	tempDir := t.TempDir()
+	service, tempDir := setupTestService(t)
 
-	// Create a git repo
-	_, err := git.PlainInit(tempDir, false)
-	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
-	}
-
-	service := NewService(
-		tempDir,
-		"https://github.com/test/repo.git",
-		"main",
-		"token",
-		Author{Name: "Test", Email: "test@example.com"},
-	)
-
-	// Create a test file
 	testFile := filepath.Join(tempDir, "test.txt")
-	err = os.WriteFile(testFile, []byte("test content"), 0644)
+	err := os.WriteFile(testFile, []byte("test content"), 0644)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	// Add file using absolute path
 	err = service.Add(testFile)
 	if err != nil {
 		t.Fatalf("failed to add file: %v", err)
@@ -291,47 +242,18 @@ func TestService_Add_AbsolutePath(t *testing.T) {
 }
 
 func TestService_Add_NoFiles(t *testing.T) {
-	tempDir := t.TempDir()
+	service, _ := setupTestService(t)
 
-	// Create a git repo
-	_, err := git.PlainInit(tempDir, false)
-	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
-	}
-
-	service := NewService(
-		tempDir,
-		"https://github.com/test/repo.git",
-		"main",
-		"token",
-		Author{Name: "Test", Email: "test@example.com"},
-	)
-
-	// Try to add with no files
-	err = service.Add()
+	err := service.Add()
 	if err == nil {
 		t.Error("expected error when adding with no files")
 	}
 }
 
 func TestService_Add_NonExistentFile(t *testing.T) {
-	tempDir := t.TempDir()
+	service, _ := setupTestService(t)
 
-	// Create a git repo
-	_, err := git.PlainInit(tempDir, false)
-	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
-	}
-
-	service := NewService(
-		tempDir,
-		"https://github.com/test/repo.git",
-		"main",
-		"token",
-		Author{Name: "Test", Email: "test@example.com"},
-	)
-
-	err = service.Add("nonexistent.txt")
+	err := service.Add("nonexistent.txt")
 	if err == nil {
 		t.Error("expected error when adding non-existent file")
 	}
@@ -352,6 +274,7 @@ func TestService_Remove(t *testing.T) {
 		"main",
 		"token",
 		Author{Name: "Test", Email: "test@example.com"},
+		slog.Default(),
 	)
 
 	// Create and commit a test file
@@ -414,6 +337,7 @@ func TestService_Commit(t *testing.T) {
 		"main",
 		"token",
 		Author{Name: "Test User", Email: "test@example.com"},
+		slog.Default(),
 	)
 
 	// Create and add a test file
@@ -464,24 +388,9 @@ func TestService_Commit(t *testing.T) {
 }
 
 func TestService_Commit_NoChanges(t *testing.T) {
-	tempDir := t.TempDir()
+	service, _ := setupTestService(t)
 
-	// Create a git repo
-	_, err := git.PlainInit(tempDir, false)
-	if err != nil {
-		t.Fatalf("failed to init repo: %v", err)
-	}
-
-	service := NewService(
-		tempDir,
-		"https://github.com/test/repo.git",
-		"main",
-		"token",
-		Author{Name: "Test", Email: "test@example.com"},
-	)
-
-	// Try to commit with no changes
-	err = service.Commit("test commit")
+	err := service.Commit("test commit")
 	if err == nil {
 		t.Error("expected error when committing with no changes")
 	}
@@ -506,6 +415,7 @@ func TestService_CommitAndPush(t *testing.T) {
 		"main",
 		"token",
 		Author{Name: "Test User", Email: "test@example.com"},
+		slog.Default(),
 	)
 
 	// Create and add a test file
@@ -521,7 +431,7 @@ func TestService_CommitAndPush(t *testing.T) {
 	}
 
 	// Test commit part (push will fail without remote, which is expected)
-	ctx := context.Background()
+	ctx := t.Context()
 	err = service.CommitAndPush(ctx, "test commit")
 	// We expect push to fail, but commit should succeed
 	// In a real test, you'd set up a test remote or mock it
@@ -551,6 +461,7 @@ func TestService_NewService(t *testing.T) {
 		"main",
 		"token",
 		Author{Name: "Test", Email: "test@example.com"},
+		slog.Default(),
 	)
 
 	if service.repoDir != "/tmp/repo" {

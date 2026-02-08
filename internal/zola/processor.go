@@ -1,9 +1,10 @@
 package zola
 
 import (
+	"cmp"
 	"html"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -11,23 +12,21 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-// ProcessContent converts Telegram HTML content to Markdown format.
-// HTML entities are NOT decoded (matches TypeScript implementation).
+// Package-level compiled regexps — avoids recompilation on every function call.
+var (
+	codeBlockWithLangRegex = regexp.MustCompile(`<pre><code class="language-(.*?)">([\s\S]*?)</code></pre>`)
+	codeBlockNoLangRegex   = regexp.MustCompile(`<pre><code>([\s\S]*?)</code></pre>`)
+	addressRegex           = regexp.MustCompile(`(?m)(\s\s\n)?0x[0-9a-fA-F]+\n?$`)
+)
+
+// ProcessContent converts HTML content (from EntitiesToHTML) to Zola-compatible format.
+// Converts code blocks to markdown and handles line breaks.
 func ProcessContent(content string) string {
 	if content == "" {
 		return ""
 	}
 
-	codeRegex := regexp.MustCompile(`<code>([\s\S]*?)</code>`)
-	content = codeRegex.ReplaceAllStringFunc(content, func(match string) string {
-		codeContent := codeRegex.FindStringSubmatch(match)[1]
-		escapedCodeContent := strings.ReplaceAll(codeContent, "<", "&lt;")
-		escapedCodeContent = strings.ReplaceAll(escapedCodeContent, ">", "&gt;")
-		return "<code>" + escapedCodeContent + "</code>"
-	})
-
 	// Handle code blocks WITH language → convert to markdown
-	codeBlockWithLangRegex := regexp.MustCompile(`<pre><code class="language-(.*?)">([\s\S]*?)</code></pre>`)
 	codeBlockPlaceholders := make(map[string]string)
 	codeIndex := 0
 	content = codeBlockWithLangRegex.ReplaceAllStringFunc(content, func(match string) string {
@@ -35,30 +34,22 @@ func ProcessContent(content string) string {
 		language := matches[1]
 		codeContent := strings.TrimRight(matches[2], "\n")
 		markdownCodeBlock := "```" + language + "\n" + codeContent + "\n```"
-		placeholder := "___CODEBLOCK_" + string(rune('A'+codeIndex)) + "___"
+		placeholder := "___CODEBLOCK_" + strconv.Itoa(codeIndex) + "___"
 		codeBlockPlaceholders[placeholder] = markdownCodeBlock
 		codeIndex++
 		return placeholder
 	})
 
 	// Handle code blocks WITHOUT language → preserve as placeholder to protect from newline conversion
-	codeBlockNoLangRegex := regexp.MustCompile(`<pre><code>([\s\S]*?)</code></pre>`)
 	content = codeBlockNoLangRegex.ReplaceAllStringFunc(content, func(match string) string {
 		matches := codeBlockNoLangRegex.FindStringSubmatch(match)
 		codeContent := strings.TrimRight(matches[1], "\n")
 		// Convert to markdown code block without language
 		markdownCodeBlock := "```\n" + codeContent + "\n```"
-		placeholder := "___CODEBLOCK_" + string(rune('A'+codeIndex)) + "___"
+		placeholder := "___CODEBLOCK_" + strconv.Itoa(codeIndex) + "___"
 		codeBlockPlaceholders[placeholder] = markdownCodeBlock
 		codeIndex++
 		return placeholder
-	})
-
-	blockquoteRegex := regexp.MustCompile(`<blockquote>([\s\S]*?)</blockquote>`)
-	content = blockquoteRegex.ReplaceAllStringFunc(content, func(match string) string {
-		blockquoteContent := blockquoteRegex.FindStringSubmatch(match)[1]
-		blockquoteContent = strings.ReplaceAll(blockquoteContent, "\n", "<br>")
-		return "<blockquote>" + blockquoteContent + "</blockquote>"
 	})
 
 	content = strings.ReplaceAll(content, "\n", "  \n")
@@ -67,10 +58,6 @@ func ProcessContent(content string) string {
 	for placeholder, codeBlock := range codeBlockPlaceholders {
 		content = strings.ReplaceAll(content, placeholder, codeBlock)
 	}
-
-	// Convert legacy spoiler tags if present
-	spoilerRegex := regexp.MustCompile(`<spoiler>([\s\S]*?)</spoiler>`)
-	content = spoilerRegex.ReplaceAllString(content, `<span class="spoiler">$1</span>`)
 
 	return content
 }
@@ -82,7 +69,6 @@ func ExtractTitle(content string, channelID string) string {
 		return channelID
 	}
 
-	addressRegex := regexp.MustCompile(`(?m)(\s\s\n)?0x[0-9a-fA-F]+\n?$`)
 	match := addressRegex.FindString(content)
 	if match != "" {
 		address := strings.TrimSpace(match)
@@ -94,7 +80,6 @@ func ExtractTitle(content string, channelID string) string {
 
 // RemoveAddressPattern removes the address regex pattern from content.
 func RemoveAddressPattern(content string) string {
-	addressRegex := regexp.MustCompile(`(?m)(\s\s\n)?0x[0-9a-fA-F]+\n?$`)
 	return addressRegex.ReplaceAllString(content, "")
 }
 
@@ -116,9 +101,10 @@ func BuildFrontMatter(post Post) string {
 	sb.WriteString("\"\n")
 	sb.WriteString("date = ")
 	sb.WriteString(post.Date.Format(time.RFC3339))
-	sb.WriteString("\n\n")
+	sb.WriteString("\n")
 
 	if len(post.ImageNames) > 0 {
+		sb.WriteString("\n")
 		sb.WriteString("[extra]\n")
 		sb.WriteString("images = [")
 		for i, imgName := range post.ImageNames {
@@ -136,16 +122,16 @@ func BuildFrontMatter(post Post) string {
 	return sb.String()
 }
 
-// entityInfo holds entity position and tag info
 type entityInfo struct {
-	offset   int
-	length   int
-	startTag string
-	endTag   string
-	id       int // unique ID for tracking in stack
+	offset       int
+	length       int
+	startTag     string
+	endTag       string
+	id           int  // unique ID for tracking in stack
+	isBlockquote bool // true for blockquote entities (need special newline handling)
+	isPre        bool // true for pre blocks (content not escaped, becomes markdown)
 }
 
-// tagEvent represents an opening or closing tag at a position
 type tagEvent struct {
 	pos      int
 	isStart  bool
@@ -179,6 +165,9 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 			startTag, endTag = "<code>", "</code>"
 		case *tg.MessageEntityPre:
 			offset, length = e.Offset, e.Length
+			if offset < 0 || offset+length > len(runes) {
+				continue
+			}
 			lang := e.Language
 			if lang != "" {
 				startTag = "<pre><code class=\"language-" + lang + "\">"
@@ -186,6 +175,15 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 				startTag = "<pre><code>"
 			}
 			endTag = "</code></pre>"
+			infos = append(infos, &entityInfo{
+				offset:   offset,
+				length:   length,
+				startTag: startTag,
+				endTag:   endTag,
+				id:       i,
+				isPre:    true,
+			})
+			continue
 		case *tg.MessageEntityStrike:
 			offset, length = e.Offset, e.Length
 			startTag, endTag = "<s>", "</s>"
@@ -194,7 +192,23 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 			startTag, endTag = "<u>", "</u>"
 		case *tg.MessageEntityBlockquote:
 			offset, length = e.Offset, e.Length
-			startTag, endTag = "<blockquote>", "</blockquote>"
+			if offset < 0 || offset+length > len(runes) {
+				continue
+			}
+			if e.Collapsed {
+				startTag, endTag = "<blockquote class=\"expandable\">", "</blockquote>"
+			} else {
+				startTag, endTag = "<blockquote>", "</blockquote>"
+			}
+			infos = append(infos, &entityInfo{
+				offset:       offset,
+				length:       length,
+				startTag:     startTag,
+				endTag:       endTag,
+				id:           i,
+				isBlockquote: true,
+			})
+			continue
 		case *tg.MessageEntitySpoiler:
 			offset, length = e.Offset, e.Length
 			startTag, endTag = "<span class=\"spoiler\">", "</span>"
@@ -208,11 +222,17 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 			endTag = "</a>"
 		case *tg.MessageEntityMention:
 			offset, length = e.Offset, e.Length
+			if offset < 0 || offset+length > len(runes) {
+				continue
+			}
 			username := strings.TrimPrefix(string(runes[offset:offset+length]), "@")
 			startTag = "<a href=\"https://t.me/" + username + "\">"
 			endTag = "</a>"
 		case *tg.MessageEntityURL:
 			offset, length = e.Offset, e.Length
+			if offset < 0 || offset+length > len(runes) {
+				continue
+			}
 			url := string(runes[offset : offset+length])
 			startTag = "<a href=\"" + html.EscapeString(url) + "\">"
 			endTag = "</a>"
@@ -223,6 +243,15 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 		}
 
 		if offset < 0 || offset+length > len(runes) {
+			continue
+		}
+
+		// Trim trailing whitespace from entity boundaries
+		// Telegram's markdown parser often includes trailing spaces in entities
+		for length > 0 && (runes[offset+length-1] == ' ' || runes[offset+length-1] == '\t') {
+			length--
+		}
+		if length <= 0 {
 			continue
 		}
 
@@ -256,19 +285,19 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 	}
 
 	// Sort events: by position, then starts before ends, then by entity length (longer entities wrap shorter)
-	sort.Slice(events, func(i, j int) bool {
-		if events[i].pos != events[j].pos {
-			return events[i].pos < events[j].pos
+	slices.SortFunc(events, func(a, b tagEvent) int {
+		if c := cmp.Compare(a.pos, b.pos); c != 0 {
+			return c
 		}
-		if events[i].priority != events[j].priority {
-			return events[i].priority < events[j].priority
+		if c := cmp.Compare(a.priority, b.priority); c != 0 {
+			return c
 		}
 		// For starts at same position: longer entities should open first (wrap shorter)
 		// For ends at same position: shorter entities should close first
-		if events[i].isStart {
-			return events[i].entity.length > events[j].entity.length
+		if a.isStart {
+			return cmp.Compare(b.entity.length, a.entity.length)
 		}
-		return events[i].entity.length < events[j].entity.length
+		return cmp.Compare(a.entity.length, b.entity.length)
 	})
 
 	var result strings.Builder
@@ -287,9 +316,39 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 		}
 	}
 
+	// Helper to check if currently inside a blockquote
+	insideBlockquote := func() bool {
+		for _, e := range openStack {
+			if e.isBlockquote {
+				return true
+			}
+		}
+		return false
+	}
+
+	insidePre := func() bool {
+		for _, e := range openStack {
+			if e.isPre {
+				return true
+			}
+		}
+		return false
+	}
+
 	for _, event := range events {
 		if event.pos > lastPos {
-			result.WriteString(html.EscapeString(string(runes[lastPos:event.pos])))
+			rawText := string(runes[lastPos:event.pos])
+			var text string
+			if insidePre() {
+				// Don't escape content inside pre blocks (will become markdown code fence)
+				text = rawText
+			} else {
+				text = html.EscapeString(rawText)
+				if insideBlockquote() {
+					text = strings.ReplaceAll(text, "\n", "<br>")
+				}
+			}
+			result.WriteString(text)
 			lastPos = event.pos
 		}
 
@@ -346,7 +405,11 @@ func EntitiesToHTML(text string, entities []tg.MessageEntityClass) string {
 	}
 
 	if lastPos < len(runes) {
-		result.WriteString(html.EscapeString(string(runes[lastPos:])))
+		text := html.EscapeString(string(runes[lastPos:]))
+		if insideBlockquote() {
+			text = strings.ReplaceAll(text, "\n", "<br>")
+		}
+		result.WriteString(text)
 	}
 
 	return result.String()

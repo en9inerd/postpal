@@ -18,5 +18,5 @@ do
 
   echo "Building $output with version $VERSION"
   CGO_ENABLED=$CGO_ENABLED GOOS=$GOOS GOARCH=$GOARCH \
-    go build -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$output" ./cmd/app/
+    go build -gcflags="all=-l -B" -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$output" ./cmd/app/
 done

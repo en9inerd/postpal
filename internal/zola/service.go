@@ -3,6 +3,7 @@ package zola
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,16 +20,18 @@ type Service struct {
 	repoDir     string
 	channelID   string
 	gitService  *git.Service
+	logger      *slog.Logger
 }
 
 // NewService creates a new Zola post service
-func NewService(postsDir, relPostsDir, repoDir, channelID string, gitService *git.Service) *Service {
+func NewService(postsDir, relPostsDir, repoDir, channelID string, gitService *git.Service, logger *slog.Logger) *Service {
 	return &Service{
 		postsDir:    postsDir,
 		relPostsDir: relPostsDir,
 		repoDir:     repoDir,
 		channelID:   channelID,
 		gitService:  gitService,
+		logger:      logger,
 	}
 }
 
@@ -41,21 +44,23 @@ func (s *Service) CreatePost(ctx context.Context, post Post, mediaFiles [][]byte
 	}
 	post.ImageNames = imageNames
 
+	postIDStr := strconv.FormatInt(post.ID, 10)
+
 	var filename string
 	var postFilePath string
 
 	if len(post.ImageNames) > 0 {
-		postDir := filepath.Join(s.postsDir, strconv.FormatInt(post.ID, 10))
+		postDir := filepath.Join(s.postsDir, postIDStr)
 		if err := os.MkdirAll(postDir, 0755); err != nil {
 			return fmt.Errorf("failed to create post directory: %w", err)
 		}
-		filename = filepath.Join(strconv.FormatInt(post.ID, 10), "index.md")
+		filename = filepath.Join(postIDStr, "index.md")
 		postFilePath = filepath.Join(s.postsDir, filename)
 	} else {
 		if err := os.MkdirAll(s.postsDir, 0755); err != nil {
 			return fmt.Errorf("failed to create posts directory: %w", err)
 		}
-		filename = strconv.FormatInt(post.ID, 10) + ".md"
+		filename = postIDStr + ".md"
 		postFilePath = filepath.Join(s.postsDir, filename)
 	}
 
@@ -79,8 +84,8 @@ func (s *Service) CreatePost(ctx context.Context, post Post, mediaFiles [][]byte
 
 	for i, mediaFile := range mediaFiles {
 		imageFilename := post.ImageNames[i]
-		imagePath := filepath.Join(s.postsDir, strconv.FormatInt(post.ID, 10), imageFilename)
-		relImagePath := filepath.Join(s.relPostsDir, strconv.FormatInt(post.ID, 10), imageFilename)
+		imagePath := filepath.Join(s.postsDir, postIDStr, imageFilename)
+		relImagePath := filepath.Join(s.relPostsDir, postIDStr, imageFilename)
 
 		if err := os.WriteFile(imagePath, mediaFile, 0644); err != nil {
 			return fmt.Errorf("failed to write image file: %w", err)
@@ -103,6 +108,8 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 		return fmt.Errorf("failed to find editable post: %w", err)
 	}
 
+	editablePostIDStr := strconv.FormatInt(editablePostID, 10)
+
 	imageNames, err := s.getPostImageNames(editablePostID)
 	if err != nil {
 		return fmt.Errorf("failed to get post image names: %w", err)
@@ -111,8 +118,34 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 	numOfMediaFiles := len(imageNames)
 	post.ID = editablePostID
 
-	if post.Content != "" {
-		if numOfMediaFiles > 0 {
+	// Check if we're converting from text-only to album (adding media to a post that had none)
+	convertingToAlbum := numOfMediaFiles == 0 && mediaFile != nil
+
+	s.logger.Debug("edit post state",
+		"original_post_id", originalPostID,
+		"editable_post_id", editablePostID,
+		"num_media_files", numOfMediaFiles,
+		"has_media_file", mediaFile != nil,
+		"has_content", post.Content != "",
+		"converting_to_album", convertingToAlbum)
+
+	// If converting to album without content update, read existing content first
+	if convertingToAlbum && post.Content == "" {
+		oldFilename := editablePostIDStr + ".md"
+		oldFilePath := filepath.Join(s.postsDir, oldFilename)
+		existingContent, err := os.ReadFile(oldFilePath)
+		if err == nil {
+			// Extract content after front matter (after second +++)
+			content := string(existingContent)
+			parts := strings.SplitN(content, "+++", 3)
+			if len(parts) >= 3 {
+				post.Content = strings.TrimSpace(parts[2])
+			}
+		}
+	}
+
+	if post.Content != "" || convertingToAlbum {
+		if numOfMediaFiles > 0 || convertingToAlbum {
 			if len(post.ImageNames) > 0 {
 				firstImageName := post.ImageNames[0]
 				parts := strings.Split(firstImageName, ".")
@@ -120,33 +153,54 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 				if len(parts) > 1 {
 					format = parts[len(parts)-1]
 				}
-				post.ImageNames = make([]string, numOfMediaFiles)
-				for i := range post.ImageNames {
-					post.ImageNames[i] = fmt.Sprintf("image_%d.%s", i, format)
+				if convertingToAlbum {
+					// New album with one image
+					post.ImageNames = []string{fmt.Sprintf("image_0.%s", format)}
+				} else {
+					post.ImageNames = make([]string, numOfMediaFiles)
+					for i := range post.ImageNames {
+						post.ImageNames[i] = fmt.Sprintf("image_%d.%s", i, format)
+					}
 				}
+			} else if convertingToAlbum {
+				format := getImageFormat(mediaFile)
+				post.ImageNames = []string{fmt.Sprintf("image_0.%s", format)}
 			} else {
 				post.ImageNames = imageNames
 			}
 		}
 
-		processedContent := ProcessContent(post.Content)
+		processedContent := post.Content
 		if post.Title == "" {
 			post.Title = ExtractTitle(post.Content, s.channelID)
 		}
-		processedContent = RemoveAddressPattern(processedContent)
+		// Only process if not already processed (from existing file)
+		if !strings.Contains(processedContent, "  \n") {
+			processedContent = ProcessContent(post.Content)
+			processedContent = RemoveAddressPattern(processedContent)
+		}
 
 		var filename string
 		var postFilePath string
 
-		if numOfMediaFiles > 0 {
-			postDir := filepath.Join(s.postsDir, strconv.FormatInt(editablePostID, 10))
+		if numOfMediaFiles > 0 || convertingToAlbum {
+			postDir := filepath.Join(s.postsDir, editablePostIDStr)
 			if err := os.MkdirAll(postDir, 0755); err != nil {
 				return fmt.Errorf("failed to create post directory: %w", err)
 			}
-			filename = filepath.Join(strconv.FormatInt(editablePostID, 10), "index.md")
+			filename = filepath.Join(editablePostIDStr, "index.md")
 			postFilePath = filepath.Join(s.postsDir, filename)
+
+			// If converting to album, remove the old .md file
+			if convertingToAlbum {
+				oldFilename := editablePostIDStr + ".md"
+				oldFilePath := filepath.Join(s.postsDir, oldFilename)
+				_ = os.Remove(oldFilePath)
+				relOldPath := filepath.Join(s.relPostsDir, oldFilename)
+				_ = s.gitService.Remove(relOldPath)
+			}
 		} else {
-			filename = strconv.FormatInt(editablePostID, 10) + ".md"
+			filename = editablePostIDStr + ".md"
 			postFilePath = filepath.Join(s.postsDir, filename)
 		}
 
@@ -167,10 +221,10 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 		index := originalPostID - editablePostID
 		format := getImageFormat(mediaFile)
 		imageFilename := fmt.Sprintf("image_%d.%s", index, format)
-		imagePath := filepath.Join(s.postsDir, strconv.FormatInt(editablePostID, 10), imageFilename)
-		relImagePath := filepath.Join(s.relPostsDir, strconv.FormatInt(editablePostID, 10), imageFilename)
+		imagePath := filepath.Join(s.postsDir, editablePostIDStr, imageFilename)
+		relImagePath := filepath.Join(s.relPostsDir, editablePostIDStr, imageFilename)
 
-		postDir := filepath.Join(s.postsDir, strconv.FormatInt(editablePostID, 10))
+		postDir := filepath.Join(s.postsDir, editablePostIDStr)
 		if err := os.MkdirAll(postDir, 0755); err != nil {
 			return fmt.Errorf("failed to create post directory: %w", err)
 		}
@@ -189,6 +243,8 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 
 // DeletePost deletes one or more posts (comma-separated IDs)
 func (s *Service) DeletePost(ctx context.Context, ids string) error {
+	deleted := false
+
 	for idStr := range strings.SplitSeq(ids, ",") {
 		idStr = strings.TrimSpace(idStr)
 		if idStr == "" {
@@ -205,31 +261,37 @@ func (s *Service) DeletePost(ctx context.Context, ids string) error {
 			continue
 		}
 
+		postIDStr := strconv.FormatInt(postID, 10)
+
 		if len(imageNames) > 0 {
-			postDir := filepath.Join(s.postsDir, strconv.FormatInt(postID, 10))
+			// Album post - delete directory
+			postDir := filepath.Join(s.postsDir, postIDStr)
 			if err := os.RemoveAll(postDir); err != nil {
 				return fmt.Errorf("failed to remove post directory: %w", err)
 			}
 
-			relPostDir := filepath.Join(s.relPostsDir, strconv.FormatInt(postID, 10))
+			relPostDir := filepath.Join(s.relPostsDir, postIDStr)
 			_ = s.gitService.Remove(filepath.Join(relPostDir, "index.md"))
 
 			for _, imageName := range imageNames {
 				_ = s.gitService.Remove(filepath.Join(relPostDir, imageName))
 			}
+			deleted = true
 		} else {
-			filename := strconv.FormatInt(postID, 10) + ".md"
+			// Text-only post - delete .md file
+			filename := postIDStr + ".md"
 			postFilePath := filepath.Join(s.postsDir, filename)
-			_ = os.Remove(postFilePath)
-
-			relPostPath := filepath.Join(s.relPostsDir, filename)
-			_ = s.gitService.Remove(relPostPath)
+			if _, err := os.Stat(postFilePath); err == nil {
+				_ = os.Remove(postFilePath)
+				relPostPath := filepath.Join(s.relPostsDir, filename)
+				_ = s.gitService.Remove(relPostPath)
+				deleted = true
+			}
 		}
 	}
 
-	commitMsg := fmt.Sprintf("Delete post(s): %s", ids)
-	if err := s.gitService.CommitAndPush(ctx, commitMsg); err != nil {
-		return fmt.Errorf("failed to commit and push deletion: %w", err)
+	if !deleted {
+		return nil
 	}
 
 	return nil
@@ -249,20 +311,10 @@ func (s *Service) getEditablePostID(postID int64) (int64, error) {
 			continue
 		}
 
-		var id int64
-		if strings.Contains(name, ".") {
-			idStr := strings.Split(name, ".")[0]
-			var err error
-			id, err = strconv.ParseInt(idStr, 10, 64)
-			if err != nil {
-				continue
-			}
-		} else {
-			var err error
-			id, err = strconv.ParseInt(name, 10, 64)
-			if err != nil {
-				continue
-			}
+		idStr, _, _ := strings.Cut(name, ".")
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			continue
 		}
 		postIDs = append(postIDs, id)
 	}
@@ -315,19 +367,17 @@ func getImageFormat(data []byte) string {
 		return "jpg"
 	}
 
-	if len(data) >= 4 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+	if data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
 		return "jpg"
 	}
-	if len(data) >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
+	if data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
 		return "png"
 	}
-	if len(data) >= 6 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 {
+	if data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 {
 		return "gif"
 	}
-	if len(data) >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 {
-		if len(data) >= 12 && string(data[8:12]) == "WEBP" {
-			return "webp"
-		}
+	if len(data) >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 && string(data[8:12]) == "WEBP" {
+		return "webp"
 	}
 
 	return "jpg"

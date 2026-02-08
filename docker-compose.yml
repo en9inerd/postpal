@@ -1,5 +1,9 @@
 services:
   postpal:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
     image: ${DOCKERHUB_USERNAME:-en9inerd}/postpal:${VERSION:-latest}
     container_name: postpal
     restart: unless-stopped

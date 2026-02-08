@@ -81,7 +81,7 @@ Required environment variables:
 docker compose up -d
 
 # Or build locally
-docker compose -f docker-compose.build.yml up -d --build
+docker compose up -d --build
 
 # View logs
 docker compose logs -f
@@ -114,6 +114,48 @@ content/posts/123/
 └── image_1.png
 ```
 
+## Zola Theme Requirements
+
+For a theme to be compatible with PostPal, it must handle the following front matter and content format:
+
+### Front Matter (TOML)
+
+```toml
++++
+title = "Post Title"
+date = 2024-08-21T13:16:34.000Z
+
+[extra]
+images = ["image_0.jpg", "image_1.png"]
++++
+```
+
+### Theme Requirements
+
+| Requirement | Description |
+|-------------|-------------|
+| `page.title` | Display the post title |
+| `page.date` | Display the publication date (RFC3339 format) |
+| `page.extra.images` | Array of co-located image filenames |
+| `page.content \| safe` | Content may contain HTML tags |
+
+### Image Handling Example
+
+```jinja2
+{% if page.extra.images %}
+  {% for image in page.extra.images %}
+    <img src="{{ page.colocated_path ~ image }}" alt="{{ page.title }}" />
+  {% endfor %}
+{% endif %}
+```
+
+### Supported Content Elements
+
+- HTML formatting: `<strong>`, `<em>`, `<s>`, `<u>`, `<code>`, `<pre>`, `<blockquote>`
+- Links: `<a href="...">`
+- Spoilers: `<span class="spoiler">`
+- Fenced code blocks with language hints
+
 ## Commands
 
 | Command | Description |
@@ -133,8 +175,9 @@ postpal/
 │   ├── handlers/      # Bot event handlers
 │   ├── log/           # Logging
 │   └── zola/          # Zola post management
-└── pkg/tgbot/         # Telegram bot library
 ```
+
+The bot framework lives in the separate [telekit](https://github.com/en9inerd/telekit) module.
 
 ## Development
 
@@ -145,7 +188,7 @@ make format          # Format code
 make run             # Run with .env
 make docker-build    # Build Docker image locally
 make docker-up       # Start with pre-built image
-make docker-up-build # Build and start
+make docker-up-build # Build and start locally
 make docker-logs     # View logs
 make docker-down     # Stop
 ```

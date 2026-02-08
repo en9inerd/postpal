@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -11,72 +12,77 @@ import (
 
 	"github.com/en9inerd/postpal/internal/git"
 	"github.com/en9inerd/postpal/internal/zola"
-	"github.com/en9inerd/postpal/pkg/tgbot"
+	"github.com/en9inerd/telekit"
 	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/tg"
 )
 
+// PeerRef identifies a Telegram peer (channel or user) by ID and access hash.
+type PeerRef struct {
+	ID         int64
+	AccessHash int64
+}
+
 // Handlers manages bot event handlers
 type Handlers struct {
-	bot       *tgbot.Bot
-	git       *git.Service
-	zola      *zola.Service
-	channelID int64
-	authorID  int64
-	logger    *slog.Logger
+	bot     *telekit.Bot
+	git     *git.Service
+	zola    *zola.Service
+	channel PeerRef
+	author  PeerRef
+	logger  *slog.Logger
 }
 
 // New creates a new Handlers instance
-func New(bot *tgbot.Bot, gitSvc *git.Service, zolaSvc *zola.Service, channelID, authorID int64, logger *slog.Logger) *Handlers {
+func New(bot *telekit.Bot, gitSvc *git.Service, zolaSvc *zola.Service, channel, author PeerRef, logger *slog.Logger) *Handlers {
 	return &Handlers{
-		bot:       bot,
-		git:       gitSvc,
-		zola:      zolaSvc,
-		channelID: channelID,
-		authorID:  authorID,
-		logger:    logger,
+		bot:     bot,
+		git:     gitSvc,
+		zola:    zolaSvc,
+		channel: channel,
+		author:  author,
+		logger:  logger,
 	}
 }
 
 // Register registers all event handlers with the bot
 func (h *Handlers) Register() {
-	h.bot.OnChannelPost(h.channelID, h.handleNewPost)
-	h.bot.OnChannelEdit(h.channelID, h.handleEditPost)
-	h.bot.OnAlbum(tgbot.Filter{Chats: []int64{h.channelID}, Incoming: true}, h.handleAlbum)
+	h.bot.OnChannelPost(h.channel.ID, h.handleNewPost)
+	h.bot.OnChannelEdit(h.channel.ID, h.handleEditPost)
+	h.bot.OnAlbum(telekit.Filter{Chats: []int64{h.channel.ID}, Incoming: true}, h.handleAlbum)
 
 	// Commands (visible only to author in menu, executable only by author)
-	authorScope := tgbot.ScopeUser{UserID: h.authorID}
+	authorScope := telekit.ScopeUser{UserID: h.author.ID, AccessHash: h.author.AccessHash}
 
-	h.bot.CommandWithFilter(tgbot.CommandDef{
+	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "start",
 		Description: "Show available commands",
 		Scope:       authorScope,
-	}, tgbot.Filter{Users: []int64{h.authorID}, Incoming: true}, h.handleStart)
+	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleStart)
 
-	h.bot.CommandWithFilter(tgbot.CommandDef{
+	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "delete_post",
 		Description: "Delete post(s) from blog",
 		Scope:       authorScope,
-		Params: tgbot.Params{
-			"ids":    {Type: tgbot.TypeString, Required: true, Description: "Comma-separated post IDs"},
-			"revoke": {Type: tgbot.TypeBool, Default: false, Description: "Also delete from Telegram"},
+		Params: telekit.Params{
+			"ids":    {Type: telekit.TypeString, Required: true, Description: "Comma-separated post IDs"},
+			"revoke": {Type: telekit.TypeBool, Default: false, Description: "Also delete from Telegram"},
 		},
 		Locked: true,
-	}, tgbot.Filter{Users: []int64{h.authorID}, Incoming: true}, h.handleDeletePost)
+	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleDeletePost)
 
-	h.bot.CommandWithFilter(tgbot.CommandDef{
+	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "sync_channel_info",
 		Description: "Sync channel info",
 		Scope:       authorScope,
-		Params: tgbot.Params{
-			"logo": {Type: tgbot.TypeBool, Default: true, Description: "Sync channel logo"},
+		Params: telekit.Params{
+			"logo": {Type: telekit.TypeBool, Default: true, Description: "Sync channel logo"},
 		},
 		Locked: true,
-	}, tgbot.Filter{Users: []int64{h.authorID}, Incoming: true}, h.handleSyncChannelInfo)
+	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleSyncChannelInfo)
 }
 
-// handleNewPost processes new channel posts
-func (h *Handlers) handleNewPost(ctx *tgbot.Context) error {
+func (h *Handlers) handleNewPost(ctx *telekit.Context) error {
 	msg := ctx.Message()
 	if msg == nil {
 		return nil
@@ -88,7 +94,7 @@ func (h *Handlers) handleNewPost(ctx *tgbot.Context) error {
 	}
 
 	// Skip forwarded messages and service messages
-	if msg.FwdFrom.FromID != nil || msg.FwdFrom.FromName != "" || msg.Date == 0 {
+	if _, isFwd := msg.GetFwdFrom(); isFwd || msg.Date == 0 {
 		return nil
 	}
 
@@ -119,8 +125,7 @@ func (h *Handlers) handleNewPost(ctx *tgbot.Context) error {
 	return nil
 }
 
-// handleEditPost processes edited channel posts
-func (h *Handlers) handleEditPost(ctx *tgbot.Context) error {
+func (h *Handlers) handleEditPost(ctx *telekit.Context) error {
 	msg := ctx.Message()
 	if msg == nil {
 		return nil
@@ -153,8 +158,7 @@ func (h *Handlers) handleEditPost(ctx *tgbot.Context) error {
 	return nil
 }
 
-// handleAlbum processes grouped media (albums)
-func (h *Handlers) handleAlbum(ctx *tgbot.Context) error {
+func (h *Handlers) handleAlbum(ctx *telekit.Context) error {
 	messages := ctx.Messages()
 	if len(messages) < 2 {
 		return nil // Single message, not album
@@ -184,9 +188,9 @@ func (h *Handlers) handleAlbum(ctx *tgbot.Context) error {
 }
 
 // processMessages converts Telegram messages to a Zola post
-func (h *Handlers) processMessages(ctx *tgbot.Context, messages []*tg.Message) (zola.Post, [][]byte, error) {
+func (h *Handlers) processMessages(ctx *telekit.Context, messages []*tg.Message) (zola.Post, [][]byte, error) {
 	if len(messages) == 0 {
-		return zola.Post{}, nil, fmt.Errorf("no messages to process")
+		return zola.Post{}, nil, errors.New("no messages to process")
 	}
 
 	firstMsg := messages[0]
@@ -219,7 +223,6 @@ func (h *Handlers) processMessages(ctx *tgbot.Context, messages []*tg.Message) (
 	return post, mediaFiles, nil
 }
 
-// downloadMedia downloads media from a message
 func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Message) ([]byte, error) {
 	if msg.Media == nil {
 		return nil, nil
@@ -291,6 +294,10 @@ func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Me
 		return nil, nil
 	}
 
+	if buf.Len() == 0 {
+		return nil, nil
+	}
+
 	return buf.Bytes(), nil
 }
 
@@ -310,8 +317,7 @@ func getPhotoSizeType(size tg.PhotoSizeClass) string {
 	}
 }
 
-// handleStart shows available commands
-func (h *Handlers) handleStart(ctx *tgbot.Context) error {
+func (h *Handlers) handleStart(ctx *telekit.Context) error {
 	msg := `Available commands:
 /delete_post ids=123,456 [revoke=true] - Delete post(s) from blog
 /sync_channel_info [logo=true] - Sync channel info`
@@ -319,8 +325,7 @@ func (h *Handlers) handleStart(ctx *tgbot.Context) error {
 	return ctx.Reply(msg)
 }
 
-// handleDeletePost deletes posts from the blog
-func (h *Handlers) handleDeletePost(ctx *tgbot.Context) error {
+func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
 	ids := ctx.Params().String("ids")
 	revoke := ctx.Params().Bool("revoke")
 
@@ -328,13 +333,18 @@ func (h *Handlers) handleDeletePost(ctx *tgbot.Context) error {
 
 	if err := h.zola.DeletePost(ctx, ids); err != nil {
 		h.logger.Error("failed to delete posts", "ids", ids, "error", err)
-		return ctx.Reply(fmt.Sprintf("Error deleting post(s): %s", err.Error()))
+		return ctx.Reply(fmt.Sprintf("Error deleting post(s): %v", err))
+	}
+
+	if err := h.git.CommitAndPush(ctx, fmt.Sprintf("Delete post(s): %s", ids)); err != nil {
+		h.logger.Error("failed to commit and push", "error", err)
+		return ctx.Reply(fmt.Sprintf("Error committing deletion: %v", err))
 	}
 
 	// Optionally revoke from Telegram
 	if revoke {
 		var msgIDs []int
-		for _, idStr := range strings.Split(ids, ",") {
+		for idStr := range strings.SplitSeq(ids, ",") {
 			idStr = strings.TrimSpace(idStr)
 			if id, err := strconv.Atoi(idStr); err == nil {
 				msgIDs = append(msgIDs, id)
@@ -343,7 +353,7 @@ func (h *Handlers) handleDeletePost(ctx *tgbot.Context) error {
 
 		if len(msgIDs) > 0 {
 			_, err := ctx.API().ChannelsDeleteMessages(ctx, &tg.ChannelsDeleteMessagesRequest{
-				Channel: &tg.InputChannel{ChannelID: h.channelID},
+				Channel: &tg.InputChannel{ChannelID: h.channel.ID, AccessHash: h.channel.AccessHash},
 				ID:      msgIDs,
 			})
 			if err != nil {
@@ -355,15 +365,15 @@ func (h *Handlers) handleDeletePost(ctx *tgbot.Context) error {
 	return ctx.Reply(fmt.Sprintf("Deleted post(s): %s", ids))
 }
 
-// handleSyncChannelInfo syncs channel information
-func (h *Handlers) handleSyncChannelInfo(ctx *tgbot.Context) error {
+func (h *Handlers) handleSyncChannelInfo(ctx *telekit.Context) error {
 	syncLogo := ctx.Params().Bool("logo")
 
 	if syncLogo {
 		h.logger.Info("syncing channel logo")
 
 		channelFull, err := ctx.API().ChannelsGetFullChannel(ctx, &tg.InputChannel{
-			ChannelID: h.channelID,
+			ChannelID:  h.channel.ID,
+			AccessHash: h.channel.AccessHash,
 		})
 		if err != nil {
 			errMsg := fmt.Sprintf("Error getting channel info: %s", err.Error())
@@ -397,7 +407,6 @@ func (h *Handlers) handleSyncChannelInfo(ctx *tgbot.Context) error {
 	return ctx.Reply("Channel info synced")
 }
 
-// downloadChannelPhoto downloads channel profile photo
 func (h *Handlers) downloadChannelPhoto(ctx context.Context, api *tg.Client, photo *tg.Photo) ([]byte, error) {
 	if photo == nil || len(photo.Sizes) == 0 {
 		return nil, nil

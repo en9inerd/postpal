@@ -1,8 +1,8 @@
 package zola
 
 import (
-	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,15 +27,17 @@ func setupTestService(t *testing.T) (*Service, string) {
 		t.Fatalf("failed to init repo: %v", err)
 	}
 
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
 	gitSvc := git.NewService(
 		repoDir,
 		"https://github.com/test/repo.git",
 		"main",
 		"token",
 		git.Author{Name: "Test", Email: "test@example.com"},
+		logger,
 	)
-
-	service := NewService(postsDir, relPostsDir, repoDir, channelID, gitSvc)
+	service := NewService(postsDir, relPostsDir, repoDir, channelID, gitSvc, logger)
 
 	return service, tempDir
 }
@@ -50,7 +52,7 @@ func createPNGBytes() []byte {
 
 func TestService_CreatePost_TextOnly(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	post := Post{
 		ID:      123,
@@ -76,20 +78,20 @@ func TestService_CreatePost_TextOnly(t *testing.T) {
 	}
 
 	contentStr := string(content)
-	if !contains(contentStr, "title = \"@testchannel\"") {
+	if !strings.Contains(contentStr, "title = \"@testchannel\"") {
 		t.Errorf("expected front matter to contain title, got: %s", contentStr)
 	}
-	if !contains(contentStr, "date = 2024-01-15T10:30:00Z") {
+	if !strings.Contains(contentStr, "date = 2024-01-15T10:30:00Z") {
 		t.Errorf("expected front matter to contain date, got: %s", contentStr)
 	}
-	if !contains(contentStr, "Test content") {
+	if !strings.Contains(contentStr, "Test content") {
 		t.Errorf("expected content to contain 'Test content', got: %s", contentStr)
 	}
 }
 
 func TestService_CreatePost_WithMedia(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	post := Post{
 		ID:      456,
@@ -134,17 +136,15 @@ func TestService_CreatePost_WithMedia(t *testing.T) {
 	}
 
 	contentStr := string(content)
-	if !contains(contentStr, `images = ["image_0.jpg", "image_1.png"]`) {
+	if !strings.Contains(contentStr, `images = ["image_0.jpg", "image_1.png"]`) {
 		t.Errorf("expected front matter to contain images array, got: %s", contentStr)
 	}
 }
 
 func TestService_EditPost_FindClosestID(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	_ = context.Background()
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
-	// Ensure directory exists
 	err := os.MkdirAll(postsDir, 0755)
 	if err != nil {
 		t.Fatalf("failed to create posts directory: %v", err)
@@ -180,7 +180,7 @@ func TestService_EditPost_FindClosestID(t *testing.T) {
 
 func TestService_EditPost_WithExistingMedia(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
 	postDir := filepath.Join(postsDir, "200")
@@ -213,14 +213,14 @@ func TestService_EditPost_WithExistingMedia(t *testing.T) {
 	}
 
 	contentStr := string(content)
-	if !contains(contentStr, "image_0.jpg") || !contains(contentStr, "image_1.jpg") {
+	if !strings.Contains(contentStr, "image_0.jpg") || !strings.Contains(contentStr, "image_1.jpg") {
 		t.Errorf("expected front matter to contain existing images, got: %s", contentStr)
 	}
 }
 
 func TestService_EditPost_WithNewMedia(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
 	postDir := filepath.Join(postsDir, "300")
@@ -252,7 +252,7 @@ func TestService_EditPost_WithNewMedia(t *testing.T) {
 
 func TestService_DeletePost_TextOnly(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
 	// Ensure directory exists
@@ -266,10 +266,8 @@ func TestService_DeletePost_TextOnly(t *testing.T) {
 		t.Fatalf("failed to create test post: %v", err)
 	}
 
-	// DeletePost will try to commit, but since files aren't in git, it will fail
-	// We'll just verify the files are deleted, not the git operations
-	if err := service.DeletePost(ctx, "400"); err != nil && !strings.Contains(err.Error(), "no changes to commit") {
-		t.Fatalf("DeletePost failed with unexpected error: %v", err)
+	if err := service.DeletePost(ctx, "400"); err != nil {
+		t.Fatalf("DeletePost failed: %v", err)
 	}
 
 	// Verify file was deleted
@@ -280,7 +278,7 @@ func TestService_DeletePost_TextOnly(t *testing.T) {
 
 func TestService_DeletePost_WithMedia(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
 	postDir := filepath.Join(postsDir, "500")
@@ -299,8 +297,8 @@ func TestService_DeletePost_WithMedia(t *testing.T) {
 		t.Fatalf("failed to create image: %v", err)
 	}
 
-	if err := service.DeletePost(ctx, "500"); err != nil && !strings.Contains(err.Error(), "no changes to commit") {
-		t.Fatalf("DeletePost failed with unexpected error: %v", err)
+	if err := service.DeletePost(ctx, "500"); err != nil {
+		t.Fatalf("DeletePost failed: %v", err)
 	}
 
 	if _, err := os.Stat(postDir); err == nil {
@@ -310,7 +308,7 @@ func TestService_DeletePost_WithMedia(t *testing.T) {
 
 func TestService_DeletePost_MultipleIDs(t *testing.T) {
 	service, tempDir := setupTestService(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
 	if err := os.MkdirAll(postsDir, 0755); err != nil {
@@ -324,8 +322,8 @@ func TestService_DeletePost_MultipleIDs(t *testing.T) {
 		}
 	}
 
-	if err := service.DeletePost(ctx, "600, 601, 602"); err != nil && !strings.Contains(err.Error(), "no changes to commit") {
-		t.Fatalf("DeletePost failed with unexpected error: %v", err)
+	if err := service.DeletePost(ctx, "600, 601, 602"); err != nil {
+		t.Fatalf("DeletePost failed: %v", err)
 	}
 
 	for _, id := range []string{"600", "601", "602"} {
@@ -447,8 +445,4 @@ func TestService_getImageFormat(t *testing.T) {
 			}
 		})
 	}
-}
-
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
 }

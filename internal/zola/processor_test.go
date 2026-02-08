@@ -31,23 +31,8 @@ func TestProcessContent_LineBreaks(t *testing.T) {
 	}
 }
 
-func TestProcessContent_SpoilerTags(t *testing.T) {
-	input := "This is a <spoiler>hidden message</spoiler> in the text"
-	expected := "This is a <span class=\"spoiler\">hidden message</span> in the text"
-	result := ProcessContent(input)
-	if result != expected {
-		t.Errorf("Expected %q, got %q", expected, result)
-	}
-}
-
-func TestProcessContent_MultipleSpoilers(t *testing.T) {
-	input := "First <spoiler>secret 1</spoiler> and second <spoiler>secret 2</spoiler>"
-	expected := "First <span class=\"spoiler\">secret 1</span> and second <span class=\"spoiler\">secret 2</span>"
-	result := ProcessContent(input)
-	if result != expected {
-		t.Errorf("Expected %q, got %q", expected, result)
-	}
-}
+// Note: Spoiler tag tests removed - Telegram sends MessageEntitySpoiler entities,
+// not HTML tags. EntitiesToHTML converts these to <span class="spoiler"> directly.
 
 func TestProcessContent_InlineCode(t *testing.T) {
 	input := "Use <code>fmt.Println()</code> to print"
@@ -59,10 +44,10 @@ func TestProcessContent_InlineCode(t *testing.T) {
 }
 
 func TestProcessContent_InlineCodeWithAngleBrackets(t *testing.T) {
-	// TypeScript escapes < and > to &lt; and &gt; in code tags
-	// But if input already has entities, they stay as entities
-	input := "Check <code>if x < 10 && y > 5</code> condition"
-	expected := "Check <code>if x &lt; 10 && y &gt; 5</code> condition"
+	// EntitiesToHTML already escapes < and > via html.EscapeString
+	// So ProcessContent receives pre-escaped content
+	input := "Check <code>if x &lt; 10 &amp;&amp; y &gt; 5</code> condition"
+	expected := "Check <code>if x &lt; 10 &amp;&amp; y &gt; 5</code> condition"
 	result := ProcessContent(input)
 	if result != expected {
 		t.Errorf("Expected %q, got %q", expected, result)
@@ -95,7 +80,9 @@ func TestProcessContent_CodeBlockWithLanguage(t *testing.T) {
 }
 
 func TestProcessContent_Blockquote(t *testing.T) {
-	input := "<blockquote>This is a quote\nwith multiple lines</blockquote>"
+	// Blockquote newlines are now handled by EntitiesToHTML, not ProcessContent
+	// ProcessContent receives blockquotes with <br> already inserted
+	input := "<blockquote>This is a quote<br>with multiple lines</blockquote>"
 	expected := "<blockquote>This is a quote<br>with multiple lines</blockquote>"
 	result := ProcessContent(input)
 	if result != expected {
@@ -104,13 +91,13 @@ func TestProcessContent_Blockquote(t *testing.T) {
 }
 
 func TestProcessContent_ComplexContent(t *testing.T) {
+	// Note: Blockquote newlines are handled by EntitiesToHTML, so input has <br> already
 	input := `Here's some text
 with line breaks.
 
-<blockquote>This is quoted
-text</blockquote>
+<blockquote>This is quoted<br>text</blockquote>
 
-More text with <spoiler>hidden content</spoiler>.
+More text with <span class="spoiler">hidden content</span>.
 
 <pre><code class="language-go">func test() {
     return true
@@ -118,10 +105,7 @@ More text with <spoiler>hidden content</spoiler>.
 </code></pre>
 
 Final text.`
-	// TypeScript processes line breaks before converting code blocks
-	// So code blocks may have double spaces in their content
-	// But actually, <pre> sections are left untouched during line break processing
-	// So code blocks should NOT have double spaces
+	// Code blocks should preserve their internal formatting (no double spaces)
 	expected := "Here's some text  \nwith line breaks.  \n\n<blockquote>This is quoted<br>text</blockquote>  \n\nMore text with <span class=\"spoiler\">hidden content</span>.  \n\n```go\nfunc test() {\n    return true\n}\n```  \n\nFinal text."
 	result := ProcessContent(input)
 	if result != expected {
@@ -228,7 +212,6 @@ func TestBuildFrontMatter_Simple(t *testing.T) {
 	expected := `+++
 title = "Test Post"
 date = 2024-01-15T10:30:00Z
-
 +++
 
 `
@@ -271,7 +254,6 @@ func TestBuildFrontMatter_WithQuotesInTitle(t *testing.T) {
 	expected := `+++
 title = "Title with \"quotes\""
 date = 2024-03-01T12:00:00Z
-
 +++
 
 `

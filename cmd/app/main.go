@@ -2,20 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
+	"time"
 
 	"github.com/en9inerd/postpal/internal/config"
 	"github.com/en9inerd/postpal/internal/git"
 	"github.com/en9inerd/postpal/internal/handlers"
 	"github.com/en9inerd/postpal/internal/log"
 	"github.com/en9inerd/postpal/internal/zola"
-	"github.com/en9inerd/postpal/pkg/tgbot"
+	"github.com/en9inerd/telekit"
 )
 
 var version = "dev"
@@ -35,32 +37,32 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 	logger.Info("starting postpal", "version", version)
 
 	if cfg.TelegramAPIID == 0 {
-		return fmt.Errorf("TELEGRAM_API_ID is required")
+		return errors.New("TELEGRAM_API_ID is required")
 	}
 	if cfg.TelegramAPIHash == "" {
-		return fmt.Errorf("TELEGRAM_API_HASH is required")
+		return errors.New("TELEGRAM_API_HASH is required")
 	}
 	if cfg.TelegramBotToken == "" {
-		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
+		return errors.New("TELEGRAM_BOT_TOKEN is required")
 	}
 	if cfg.Channel == "" {
-		return fmt.Errorf("TELEGRAM_CHANNEL or TELEGRAM_CHANNEL_ID is required")
+		return errors.New("TELEGRAM_CHANNEL or TELEGRAM_CHANNEL_ID is required")
 	}
 	if cfg.Author == "" {
-		return fmt.Errorf("TELEGRAM_AUTHOR or TELEGRAM_AUTHOR_ID is required")
+		return errors.New("TELEGRAM_AUTHOR or TELEGRAM_AUTHOR_ID is required")
 	}
 	if cfg.GitRepoURL == "" {
-		return fmt.Errorf("GIT_REPO_URL is required")
+		return errors.New("GIT_REPO_URL is required")
 	}
 
-	bot, err := tgbot.New(tgbot.Config{
+	bot, err := telekit.New(telekit.Config{
 		APIID:        cfg.TelegramAPIID,
 		APIHash:      cfg.TelegramAPIHash,
 		BotToken:     cfg.TelegramBotToken,
 		SessionDir:   cfg.SessionDir,
-		SyncCommands: true,
 		Logger:       logger,
 		Verbose:      verbose,
+		SyncCommands: true,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create bot: %w", err)
@@ -72,35 +74,41 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 		cfg.GitBranch,
 		cfg.GitAuthToken,
 		git.Author{Name: cfg.GitAuthorName, Email: cfg.GitAuthorEmail},
+		logger,
 	)
 
 	bot.OnReady(func(ctx context.Context) {
 		logger.Info("bot ready, resolving identifiers")
 
-		channelID, err := resolveID(ctx, bot, cfg.Channel, true)
+		channelID, channelAccessHash, channelTitle, err := bot.ResolveIdentifier(ctx, cfg.Channel, true)
 		if err != nil {
 			logger.Error("failed to resolve channel", "channel", cfg.Channel, "error", err)
 			return
 		}
 
-		authorID, err := resolveID(ctx, bot, cfg.Author, false)
+		authorID, authorAccessHash, _, err := bot.ResolveIdentifier(ctx, cfg.Author, false)
 		if err != nil {
 			logger.Error("failed to resolve author", "author", cfg.Author, "error", err)
 			return
 		}
 
-		logger.Info("resolved identifiers", "channel_id", channelID, "author_id", authorID)
+		logger.Info("resolved identifiers", "channel_id", channelID, "channel_title", channelTitle, "author_id", authorID)
 
 		postsDir := filepath.Join(cfg.GitRepoDir, cfg.ZolaPostsDir)
 		zolaSvc := zola.NewService(
 			postsDir,
 			cfg.ZolaPostsDir,
 			cfg.GitRepoDir,
-			fmt.Sprintf("%d", channelID),
+			channelTitle,
 			gitSvc,
+			logger,
 		)
 
-		h := handlers.New(bot, gitSvc, zolaSvc, channelID, authorID, logger)
+		h := handlers.New(bot, gitSvc, zolaSvc,
+			handlers.PeerRef{ID: channelID, AccessHash: channelAccessHash},
+			handlers.PeerRef{ID: authorID, AccessHash: authorAccessHash},
+			logger,
+		)
 		h.Register()
 
 		if gitSvc.RepoExists() {
@@ -120,6 +128,22 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 			"channel", cfg.Channel,
 			"author", cfg.Author)
 	})
+
+	// Start health check server
+	healthSrv := &http.Server{Addr: ":8080", Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})}
+	go func() {
+		if err := healthSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("health server error", "error", err)
+		}
+	}()
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		healthSrv.Shutdown(shutdownCtx)
+	}()
 
 	logger.Info("starting bot")
 	if err := bot.Run(ctx); err != nil {
@@ -146,29 +170,4 @@ func cleanArgs(args []string) (cleanArgs []string, verbose bool) {
 		}
 	}
 	return
-}
-
-// resolveID resolves a string identifier (numeric ID or @username) to a numeric ID.
-func resolveID(ctx context.Context, bot *tgbot.Bot, identifier string, isChannel bool) (int64, error) {
-	identifier = strings.TrimSpace(identifier)
-
-	if id, err := strconv.ParseInt(identifier, 10, 64); err == nil {
-		return id, nil
-	}
-
-	username := strings.TrimPrefix(identifier, "@")
-
-	if isChannel {
-		channelID, _, err := bot.ResolveChannel(ctx, username)
-		if err != nil {
-			return 0, fmt.Errorf("failed to resolve channel @%s: %w", username, err)
-		}
-		return channelID, nil
-	}
-
-	userID, _, err := bot.ResolveUser(ctx, username)
-	if err != nil {
-		return 0, fmt.Errorf("failed to resolve user @%s: %w", username, err)
-	}
-	return userID, nil
 }

@@ -2,7 +2,9 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -27,16 +29,19 @@ type Service struct {
 	branch    string
 	authToken string
 	author    Author
+	logger    *slog.Logger
+	repo      *git.Repository // cached
 }
 
 // NewService creates a new Git service
-func NewService(repoDir, repoURL, branch, authToken string, author Author) *Service {
+func NewService(repoDir, repoURL, branch, authToken string, author Author, logger *slog.Logger) *Service {
 	return &Service{
 		repoDir:   repoDir,
 		repoURL:   repoURL,
 		branch:    branch,
 		authToken: authToken,
 		author:    author,
+		logger:    logger,
 	}
 }
 
@@ -46,34 +51,42 @@ func (s *Service) RepoExists() bool {
 	return err == nil
 }
 
-// Clone clones the repository
-func (s *Service) Clone(ctx context.Context) error {
-	auth := &http.BasicAuth{
+// auth returns HTTP basic auth credentials for git operations.
+func (s *Service) auth() *http.BasicAuth {
+	return &http.BasicAuth{
 		Username: "token",
 		Password: s.authToken,
 	}
+}
 
-	_, err := git.PlainCloneContext(ctx, s.repoDir, &git.CloneOptions{
+// Clone clones the repository
+func (s *Service) Clone(ctx context.Context) error {
+	s.logger.Info("cloning repository", "url", s.repoURL, "branch", s.branch)
+	repo, err := git.PlainCloneContext(ctx, s.repoDir, &git.CloneOptions{
 		URL:           s.repoURL,
-		Auth:          auth,
+		Auth:          s.auth(),
 		ReferenceName: plumbing.NewBranchReferenceName(s.branch),
 		SingleBranch:  true,
 		Depth:         1,
-		Progress:      os.Stdout,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
+	s.repo = repo
 
 	return s.AssignAuthor()
 }
 
-// Open opens an existing repository
+// Open opens an existing repository, returning the cached handle if available.
 func (s *Service) Open() (*git.Repository, error) {
+	if s.repo != nil {
+		return s.repo, nil
+	}
 	repo, err := git.PlainOpen(s.repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open repository: %w", err)
 	}
+	s.repo = repo
 	return repo, nil
 }
 
@@ -107,18 +120,13 @@ func (s *Service) Pull(ctx context.Context) error {
 		return fmt.Errorf("failed to get worktree: %w", err)
 	}
 
-	auth := &http.BasicAuth{
-		Username: "token",
-		Password: s.authToken,
-	}
-
 	err = wt.PullContext(ctx, &git.PullOptions{
 		RemoteName:    "origin",
 		ReferenceName: plumbing.NewBranchReferenceName(s.branch),
 		SingleBranch:  true,
-		Auth:          auth,
+		Auth:          s.auth(),
 	})
-	if err != nil && err != git.NoErrAlreadyUpToDate {
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to pull: %w", err)
 	}
 
@@ -128,7 +136,7 @@ func (s *Service) Pull(ctx context.Context) error {
 // Add adds files to the staging area.
 func (s *Service) Add(filePaths ...string) error {
 	if len(filePaths) == 0 {
-		return fmt.Errorf("no file paths provided")
+		return errors.New("no file paths provided")
 	}
 
 	repo, err := s.Open()
@@ -213,7 +221,7 @@ func (s *Service) Commit(message string) error {
 	}
 
 	if status.IsClean() {
-		return fmt.Errorf("no changes to commit")
+		return errors.New("no changes to commit")
 	}
 
 	_, err = wt.Commit(message, &git.CommitOptions{
@@ -237,19 +245,14 @@ func (s *Service) Push(ctx context.Context) error {
 		return err
 	}
 
-	auth := &http.BasicAuth{
-		Username: "token",
-		Password: s.authToken,
-	}
-
 	err = repo.PushContext(ctx, &git.PushOptions{
 		RemoteName: "origin",
-		Auth:       auth,
+		Auth:       s.auth(),
 		RefSpecs: []config.RefSpec{
 			config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", s.branch, s.branch)),
 		},
 	})
-	if err != nil && err != git.NoErrAlreadyUpToDate {
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to push: %w", err)
 	}
 

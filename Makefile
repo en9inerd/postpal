@@ -23,15 +23,18 @@ test:
 run:
 	@test -f .env && set -a && . ./.env && set +a; $(GO) run ./cmd/app
 
+run-verbose:
+	@test -f .env && set -a && . ./.env && set +a; $(GO) run ./cmd/app --verbose
+
 # Docker targets
 docker-build:
-	docker compose -f docker-compose.build.yml build
+	docker build -t $(BINARY_NAME):test .
 
 docker-up:
 	docker compose up -d
 
 docker-up-build:
-	docker compose -f docker-compose.build.yml up -d --build
+	docker compose up -d --build
 
 docker-down:
 	docker compose down
@@ -50,5 +53,5 @@ docker-clean-all: docker-clean
 	@docker builder prune -f
 	@echo "Docker cleanup complete (including build cache)"
 
-.PHONY: all build build-prod clean format test run \
+.PHONY: all build build-prod clean format test run run-verbose \
         docker-build docker-up docker-up-build docker-down docker-logs docker-clean docker-clean-all

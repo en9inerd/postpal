@@ -1,6 +1,7 @@
 # ---------- Build ----------
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25.7-alpine AS builder
 
+# Install packages with --no-scripts to avoid trigger errors in QEMU emulation
 RUN apk update && apk add --no-cache --no-scripts git ca-certificates
 
 WORKDIR /build
@@ -18,14 +19,16 @@ RUN CGO_ENABLED=0 \
     GOOS=${TARGETOS:-linux} \
     GOARCH=${TARGETARCH:-amd64} \
     go build \
+      -gcflags="all=-l -B" \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
       -o /app \
       ./cmd/app
 
 # ---------- Runtime ----------
-FROM alpine:latest
+FROM alpine:3.23
 
+# Install packages with --no-scripts to avoid trigger errors in QEMU emulation
 RUN apk update && \
     apk add --no-cache --no-scripts \
         ca-certificates \
@@ -41,5 +44,9 @@ RUN mkdir -p /app/session /app/repo && chown -R app:app /app
 COPY --from=builder /app /app/postpal
 
 USER app
+
+EXPOSE 8080
+
+HEALTHCHECK CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
 
 CMD ["/app/postpal"]

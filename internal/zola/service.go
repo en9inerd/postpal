@@ -329,13 +329,13 @@ func (s *Service) getEditablePostID(postID int64) (int64, error) {
 		return postID, nil
 	}
 
+	// Prefer the largest ID <= postID. Album message IDs are always >= the
+	// first message's ID, so looking backward finds the correct album post
+	// even when a newer post is numerically closer.
+	slices.Sort(postIDs)
 	closestID := postIDs[0]
-	minDiff := abs(postID - closestID)
-
-	for _, id := range postIDs[1:] {
-		diff := abs(postID - id)
-		if diff < minDiff {
-			minDiff = diff
+	for _, id := range postIDs {
+		if id <= postID {
 			closestID = id
 		}
 	}
@@ -387,13 +387,6 @@ func getImageFormat(data []byte) string {
 	}
 
 	return "jpg"
-}
-
-func abs(x int64) int64 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
 
 // SaveChannelLogo saves the channel logo to the static directory

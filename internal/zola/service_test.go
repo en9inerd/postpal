@@ -145,36 +145,59 @@ func TestService_EditPost_FindClosestID(t *testing.T) {
 	service, tempDir := setupTestService(t)
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
-	err := os.MkdirAll(postsDir, 0755)
-	if err != nil {
-		t.Fatalf("failed to create posts directory: %v", err)
+
+	// Create album post at 100 (directory with index.md) — album has messages 100-103
+	albumDir := filepath.Join(postsDir, "100")
+	if err := os.MkdirAll(albumDir, 0755); err != nil {
+		t.Fatalf("failed to create album directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(albumDir, "index.md"), []byte("album post"), 0644); err != nil {
+		t.Fatalf("failed to create album index.md: %v", err)
 	}
 
-	// Create existing posts: 100, 105, 110
-	for _, id := range []int64{100, 105, 110} {
+	// Create text-only posts at 105 and 110
+	for _, id := range []int64{105, 110} {
 		postPath := filepath.Join(postsDir, fmt.Sprintf("%d.md", id))
-		err := os.WriteFile(postPath, []byte("existing post"), 0644)
-		if err != nil {
+		if err := os.WriteFile(postPath, []byte("text post"), 0644); err != nil {
 			t.Fatalf("failed to create test post: %v", err)
 		}
 	}
 
+	// Message 103 is part of album starting at 100 (IDs are consecutive).
+	// Prefer-below returns 100, the album's first message ID.
 	editableID, err := service.getEditablePostID(103)
 	if err != nil {
 		t.Fatalf("getEditablePostID failed: %v", err)
 	}
-
-	if editableID != 105 {
-		t.Errorf("expected closest post ID to be 105, got %d", editableID)
+	if editableID != 100 {
+		t.Errorf("expected editable post ID to be 100 (album start), got %d", editableID)
 	}
 
+	// Message 107 has no exact match; largest ID <= 107 is 105
 	editableID, err = service.getEditablePostID(107)
 	if err != nil {
 		t.Fatalf("getEditablePostID failed: %v", err)
 	}
-
 	if editableID != 105 {
-		t.Errorf("expected closest post ID to be 105, got %d", editableID)
+		t.Errorf("expected editable post ID to be 105, got %d", editableID)
+	}
+
+	// Exact match: message 110 maps directly to post 110
+	editableID, err = service.getEditablePostID(110)
+	if err != nil {
+		t.Fatalf("getEditablePostID failed: %v", err)
+	}
+	if editableID != 110 {
+		t.Errorf("expected editable post ID to be 110 (exact match), got %d", editableID)
+	}
+
+	// Edge case: ID below all known posts falls back to the smallest post ID
+	editableID, err = service.getEditablePostID(50)
+	if err != nil {
+		t.Fatalf("getEditablePostID failed: %v", err)
+	}
+	if editableID != 100 {
+		t.Errorf("expected editable post ID to be 100 (fallback to smallest), got %d", editableID)
 	}
 }
 

@@ -371,6 +371,8 @@ func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
 func (h *Handlers) handleSyncChannelInfo(ctx *telekit.Context) error {
 	syncLogo := ctx.Params().Bool("logo")
 
+	changed := false
+
 	if syncLogo {
 		h.logger.Info("syncing channel logo")
 
@@ -397,14 +399,19 @@ func (h *Handlers) handleSyncChannelInfo(ctx *telekit.Context) error {
 						return ctx.Reply("Error saving logo: " + err.Error())
 					}
 					h.logger.Info("saved channel logo")
+					changed = true
 				}
 			}
 		}
+	}
 
-		if err := h.git.CommitAndPush(ctx, "Update channel info"); err != nil {
-			h.logger.Error("failed to commit channel info", "error", err)
-			return ctx.Reply("Error: " + err.Error())
-		}
+	if !changed {
+		return ctx.Reply("No changes to sync")
+	}
+
+	if err := h.git.CommitAndPush(ctx, "Update channel info"); err != nil {
+		h.logger.Error("failed to commit channel info", "error", err)
+		return ctx.Reply("Error: " + err.Error())
 	}
 
 	return ctx.Reply("Channel info synced")

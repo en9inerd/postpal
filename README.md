@@ -44,6 +44,7 @@ Example Zola theme: [after-dark](https://github.com/en9inerd/after-dark)
 - **Media Download**: Downloads photos and video thumbnails
 - **Commands**: `/delete_post`, `/sync_channel_info` for management
 - **Git Integration**: Auto-commits and pushes changes to your blog repo
+- **Health Check**: Built-in HTTP health endpoint on port 8080
 
 ## Quick Start
 
@@ -183,14 +184,18 @@ The bot framework lives in the separate [telekit](https://github.com/en9inerd/te
 
 ```bash
 make build           # Build binary
-make test            # Run tests
+make build-prod      # Cross-compile for all platforms
+make clean           # Remove build artifacts
 make format          # Format code
+make test            # Run tests
 make run             # Run with .env
+make run-verbose     # Run with .env and verbose logging
 make docker-build    # Build Docker image locally
 make docker-up       # Start with pre-built image
 make docker-up-build # Build and start locally
+make docker-down     # Stop containers
 make docker-logs     # View logs
-make docker-down     # Stop
+make docker-clean    # Remove Docker containers and images
 ```
 
 ## License

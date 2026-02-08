@@ -332,6 +332,9 @@ func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
 	h.logger.Info("deleting posts", "ids", ids, "revoke", revoke)
 
 	if err := h.zola.DeletePost(ctx, ids); err != nil {
+		if errors.Is(err, zola.ErrNoPostsDeleted) {
+			return ctx.Reply("No matching posts found")
+		}
 		h.logger.Error("failed to delete posts", "ids", ids, "error", err)
 		return ctx.Reply(fmt.Sprintf("Error deleting post(s): %v", err))
 	}

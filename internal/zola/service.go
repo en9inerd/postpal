@@ -2,6 +2,7 @@ package zola
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +13,9 @@ import (
 
 	"github.com/en9inerd/postpal/internal/git"
 )
+
+// ErrNoPostsDeleted is returned when no posts matched the given IDs.
+var ErrNoPostsDeleted = errors.New("no posts deleted")
 
 // Service handles Zola blog post creation and management
 type Service struct {
@@ -129,7 +133,9 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 		"has_content", post.Content != "",
 		"converting_to_album", convertingToAlbum)
 
-	// If converting to album without content update, read existing content first
+	// If converting to album without content update, read existing content first.
+	// Content from file is already processed, so we skip ProcessContent later.
+	contentFromFile := false
 	if convertingToAlbum && post.Content == "" {
 		oldFilename := editablePostIDStr + ".md"
 		oldFilePath := filepath.Join(s.postsDir, oldFilename)
@@ -140,6 +146,7 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 			parts := strings.SplitN(content, "+++", 3)
 			if len(parts) >= 3 {
 				post.Content = strings.TrimSpace(parts[2])
+				contentFromFile = true
 			}
 		}
 	}
@@ -174,8 +181,7 @@ func (s *Service) EditPost(ctx context.Context, post Post, mediaFile []byte) err
 		if post.Title == "" {
 			post.Title = ExtractTitle(post.Content, s.channelID)
 		}
-		// Only process if not already processed (from existing file)
-		if !strings.Contains(processedContent, "  \n") {
+		if !contentFromFile {
 			processedContent = ProcessContent(post.Content)
 			processedContent = RemoveAddressPattern(processedContent)
 		}
@@ -291,7 +297,7 @@ func (s *Service) DeletePost(ctx context.Context, ids string) error {
 	}
 
 	if !deleted {
-		return nil
+		return ErrNoPostsDeleted
 	}
 
 	return nil

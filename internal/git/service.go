@@ -45,9 +45,9 @@ func NewService(repoDir, repoURL, branch, authToken string, author Author, logge
 	}
 }
 
-// RepoExists checks if the repository directory exists
+// RepoExists checks if a valid Git repository exists at the configured path
 func (s *Service) RepoExists() bool {
-	_, err := os.Stat(s.repoDir)
+	_, err := git.PlainOpen(s.repoDir)
 	return err == nil
 }
 

@@ -96,3 +96,8 @@ tags
 
 # Environment files
 .env
+
+# Produced files
+dist
+repo
+session

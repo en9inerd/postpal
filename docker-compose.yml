@@ -4,7 +4,7 @@ services:
       context: .
       args:
         VERSION: ${VERSION:-dev}
-    image: ${DOCKERHUB_USERNAME:-en9inerd}/postpal:${VERSION:-latest}
+    image: ${DOCKERHUB_USERNAME:-enginerd}/postpal:${VERSION:-latest}
     container_name: postpal
     restart: unless-stopped
     volumes:

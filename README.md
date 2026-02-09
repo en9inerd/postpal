@@ -1,5 +1,7 @@
 # PostPal
 
+[![Docker Hub](https://img.shields.io/docker/v/enginerd/postpal?label=Docker%20Hub&logo=docker&sort=semver)](https://hub.docker.com/r/enginerd/postpal)
+
 A Go bot that syncs Telegram channel posts to a Zola static blog. Built with MTProto via [gotd/td](https://github.com/gotd/td).
 
 Example Zola theme: [after-dark](https://github.com/en9inerd/after-dark)

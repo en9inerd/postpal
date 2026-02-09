@@ -152,10 +152,11 @@ images = ["image_0.jpg", "image_1.png"]
 
 ### Supported Content Elements
 
-- HTML formatting: `<strong>`, `<em>`, `<s>`, `<u>`, `<code>`, `<pre>`, `<blockquote>`
-- Links: `<a href="...">`
+- HTML formatting: `<strong>`, `<em>`, `<s>`, `<u>`, `<code>`, `<pre>`, `<blockquote>` (including expandable)
+- Links: `<a href="...">` (text URLs, plain URLs, `@mentions`, and mention-by-ID)
 - Spoilers: `<span class="spoiler">`
 - Fenced code blocks with language hints
+- Custom emoji entities are silently skipped
 
 ## Commands
 

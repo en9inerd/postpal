@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"strconv"
 )
@@ -25,6 +26,9 @@ type Config struct {
 
 	// Zola
 	ZolaPostsDir string
+
+	// Runtime
+	Verbose bool
 }
 
 // ParseConfig parses configuration from args and environment variables
@@ -66,11 +70,15 @@ func ParseConfig(args []string, getenv func(string) string) (*Config, error) {
 	// Zola
 	zolaPostsDir := fs.String("zola-posts-dir", getEnv("ZOLA_POSTS_DIR", "content/posts"), "Zola posts directory (relative to repo)")
 
+	// Runtime
+	verbose := fs.Bool("verbose", false, "Enable verbose logging")
+	fs.BoolVar(verbose, "v", false, "Enable verbose logging (shorthand)")
+
 	if err := fs.Parse(args[1:]); err != nil {
 		return nil, err
 	}
 
-	return &Config{
+	cfg := &Config{
 		TelegramAPIID:    *telegramAPIID,
 		TelegramAPIHash:  *telegramAPIHash,
 		TelegramBotToken: *telegramBotToken,
@@ -84,5 +92,34 @@ func ParseConfig(args []string, getenv func(string) string) (*Config, error) {
 		GitAuthorName:    *gitAuthorName,
 		GitAuthorEmail:   *gitAuthorEmail,
 		ZolaPostsDir:     *zolaPostsDir,
-	}, nil
+		Verbose:          *verbose,
+	}
+
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func (c *Config) validate() error {
+	if c.TelegramAPIID == 0 {
+		return errors.New("TELEGRAM_API_ID is required")
+	}
+	if c.TelegramAPIHash == "" {
+		return errors.New("TELEGRAM_API_HASH is required")
+	}
+	if c.TelegramBotToken == "" {
+		return errors.New("TELEGRAM_BOT_TOKEN is required")
+	}
+	if c.Channel == "" {
+		return errors.New("TELEGRAM_CHANNEL is required")
+	}
+	if c.Author == "" {
+		return errors.New("TELEGRAM_AUTHOR is required")
+	}
+	if c.GitRepoURL == "" {
+		return errors.New("GIT_REPO_URL is required")
+	}
+	return nil
 }

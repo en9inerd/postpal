@@ -204,7 +204,7 @@ func (h *Handlers) processMessages(ctx *telekit.Context, messages []*tg.Message)
 
 	for _, msg := range messages {
 		if msg.Message != "" {
-			htmlContent := zola.EntitiesToHTML(msg.Message, msg.Entities)
+			htmlContent := telekit.EntitiesToHTML(msg.Message, msg.Entities)
 			post.Content = htmlContent
 		}
 

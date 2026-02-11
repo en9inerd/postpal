@@ -26,34 +26,13 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	cleanedArgs, verbose := cleanArgs(args)
-
-	cfg, err := config.ParseConfig(cleanedArgs, getenv)
+	cfg, err := config.ParseConfig(args, getenv)
 	if err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	logger := log.NewLogger(verbose)
+	logger := log.NewLogger(cfg.Verbose)
 	logger.Info("starting postpal", "version", version)
-
-	if cfg.TelegramAPIID == 0 {
-		return errors.New("TELEGRAM_API_ID is required")
-	}
-	if cfg.TelegramAPIHash == "" {
-		return errors.New("TELEGRAM_API_HASH is required")
-	}
-	if cfg.TelegramBotToken == "" {
-		return errors.New("TELEGRAM_BOT_TOKEN is required")
-	}
-	if cfg.Channel == "" {
-		return errors.New("TELEGRAM_CHANNEL or TELEGRAM_CHANNEL_ID is required")
-	}
-	if cfg.Author == "" {
-		return errors.New("TELEGRAM_AUTHOR or TELEGRAM_AUTHOR_ID is required")
-	}
-	if cfg.GitRepoURL == "" {
-		return errors.New("GIT_REPO_URL is required")
-	}
 
 	bot, err := telekit.New(telekit.Config{
 		APIID:        cfg.TelegramAPIID,
@@ -61,7 +40,7 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 		BotToken:     cfg.TelegramBotToken,
 		SessionDir:   cfg.SessionDir,
 		Logger:       logger,
-		Verbose:      verbose,
+		Verbose:      cfg.Verbose,
 		SyncCommands: true,
 	})
 	if err != nil {
@@ -83,12 +62,14 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 		channelID, channelAccessHash, channelTitle, err := bot.ResolveIdentifier(ctx, cfg.Channel, true)
 		if err != nil {
 			logger.Error("failed to resolve channel", "channel", cfg.Channel, "error", err)
+			cancel()
 			return
 		}
 
 		authorID, authorAccessHash, _, err := bot.ResolveIdentifier(ctx, cfg.Author, false)
 		if err != nil {
 			logger.Error("failed to resolve author", "author", cfg.Author, "error", err)
+			cancel()
 			return
 		}
 
@@ -120,6 +101,7 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 			logger.Info("cloning repository")
 			if err := gitSvc.Clone(ctx); err != nil {
 				logger.Error("failed to clone repository", "error", err)
+				cancel()
 				return
 			}
 		}
@@ -163,15 +145,4 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func cleanArgs(args []string) (cleanArgs []string, verbose bool) {
-	for _, arg := range args {
-		if arg == "--verbose" || arg == "-v" {
-			verbose = true
-		} else {
-			cleanArgs = append(cleanArgs, arg)
-		}
-	}
-	return
 }

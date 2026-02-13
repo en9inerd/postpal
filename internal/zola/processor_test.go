@@ -158,8 +158,53 @@ func TestExtractTitle_EmptyContent(t *testing.T) {
 	}
 }
 
-func TestExtractTitle_NoAddress(t *testing.T) {
+func TestExtractTitle_NoAddress_ShortFirstLine(t *testing.T) {
 	content := "Some content without address"
+	result := ExtractTitle(content, "@channel")
+	expected := "Some content without address"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExtractTitle_NoAddress_LongFirstLine(t *testing.T) {
+	content := "This is a very long first line that exceeds the maximum title length limit and should be truncated"
+	result := ExtractTitle(content, "@channel")
+	expected := "This is a very long first line that exceeds the..."
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExtractTitle_NoAddress_MultiLine(t *testing.T) {
+	content := "Short title here\nMore content on second line\nAnd third"
+	result := ExtractTitle(content, "@channel")
+	expected := "Short title here"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExtractTitle_NoAddress_HTMLTags(t *testing.T) {
+	content := "Text with <b>bold</b> and <i>italic</i> words"
+	result := ExtractTitle(content, "@channel")
+	expected := "Text with bold and italic words"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExtractTitle_NoAddress_HTMLEntities(t *testing.T) {
+	content := "Check if x &lt; 10 &amp;&amp; y &gt; 5"
+	result := ExtractTitle(content, "@channel")
+	expected := "Check if x < 10 && y > 5"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestExtractTitle_NoAddress_WhitespaceOnly(t *testing.T) {
+	content := "   \n\n  "
 	result := ExtractTitle(content, "@channel")
 	if result != "@channel" {
 		t.Errorf("Expected @channel, got %q", result)
@@ -205,7 +250,7 @@ func TestExtractTitle_WithAddressUppercase(t *testing.T) {
 func TestRemoveAddressPattern(t *testing.T) {
 	content := "Some content\n0x1234abcd"
 	result := RemoveAddressPattern(content)
-	expected := "Some content\n"
+	expected := "Some content"
 	if result != expected {
 		t.Errorf("Expected %q, got %q", expected, result)
 	}
@@ -214,7 +259,7 @@ func TestRemoveAddressPattern(t *testing.T) {
 func TestRemoveAddressPattern_WithNewline(t *testing.T) {
 	content := "Some content\n0x1234abcd\n"
 	result := RemoveAddressPattern(content)
-	expected := "Some content\n"
+	expected := "Some content"
 	if result != expected {
 		t.Errorf("Expected %q, got %q", expected, result)
 	}
@@ -225,6 +270,26 @@ func TestRemoveAddressPattern_NoAddress(t *testing.T) {
 	result := RemoveAddressPattern(content)
 	if result != content {
 		t.Errorf("Expected unchanged content, got %q", result)
+	}
+}
+
+func TestRemoveAddressPattern_TrailingBrTags(t *testing.T) {
+	// Simulates processed content: "Text\n\n\n0xABC" after ProcessContent + address removal
+	content := "Text  \n  \n<br><br>"
+	result := RemoveAddressPattern(content)
+	expected := "Text"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestRemoveAddressPattern_ProcessedWithAddress(t *testing.T) {
+	// "Text\n\n0xABC" → after ProcessContent → "Text  \n  \n0xABC"
+	content := "Text  \n  \n0xABC1234"
+	result := RemoveAddressPattern(content)
+	expected := "Text"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
 	}
 }
 

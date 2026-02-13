@@ -1,18 +1,21 @@
 package zola
 
 import (
+	"html"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Package-level compiled regexps — avoids recompilation on every function call.
+const maxTitleLength = 50
+
 var (
 	codeBlockWithLangRegex = regexp.MustCompile(`<pre><code class="language-(.*?)">([\s\S]*?)</code></pre>`)
 	codeBlockNoLangRegex   = regexp.MustCompile(`<pre><code>([\s\S]*?)</code></pre>`)
 	newlineRunRegex        = regexp.MustCompile(`\n+`)
-	addressRegex           = regexp.MustCompile(`(?m)(\s\s\n)?0x[0-9a-fA-F]+\n?$`)
+	addressRegex           = regexp.MustCompile(`(\s\s\n)?0x[0-9a-fA-F]+\n?$`)
+	htmlTagRegex           = regexp.MustCompile(`<[^>]*>`)
 )
 
 // ProcessContent converts HTML content (from EntitiesToHTML) to Zola-compatible format.
@@ -40,7 +43,6 @@ func ProcessContent(content string) string {
 	content = codeBlockNoLangRegex.ReplaceAllStringFunc(content, func(match string) string {
 		matches := codeBlockNoLangRegex.FindStringSubmatch(match)
 		codeContent := strings.TrimRight(matches[1], "\n")
-		// Convert to markdown code block without language
 		markdownCodeBlock := "```\n" + codeContent + "\n```"
 		placeholder := "___CODEBLOCK_" + strconv.Itoa(codeIndex) + "___"
 		codeBlockPlaceholders[placeholder] = markdownCodeBlock
@@ -74,8 +76,10 @@ func ProcessContent(content string) string {
 	return content
 }
 
-// ExtractTitle looks for an address regex pattern (0x...) in content.
-// Returns "channelID [address]" if found, otherwise returns channelID.
+// ExtractTitle derives a post title from content.
+// If a hex address (0x...) is found at the end, returns "channelID [address]".
+// Otherwise uses the first line of content (stripped of HTML), truncated if needed.
+// Falls back to channelID for empty/whitespace-only content.
 func ExtractTitle(content string, channelID string) string {
 	if content == "" {
 		return channelID
@@ -87,12 +91,43 @@ func ExtractTitle(content string, channelID string) string {
 		return channelID + " [" + address + "]"
 	}
 
-	return channelID
+	firstLine := strings.SplitN(content, "\n", 2)[0]
+	firstLine = htmlTagRegex.ReplaceAllString(firstLine, "")
+	firstLine = html.UnescapeString(firstLine)
+	firstLine = strings.TrimSpace(firstLine)
+
+	if firstLine == "" {
+		return channelID
+	}
+
+	runes := []rune(firstLine)
+	if len(runes) <= maxTitleLength {
+		return firstLine
+	}
+
+	truncated := string(runes[:maxTitleLength])
+	if lastSpace := strings.LastIndex(truncated, " "); lastSpace > 0 {
+		truncated = truncated[:lastSpace]
+	}
+	return truncated + "..."
 }
 
-// RemoveAddressPattern removes the address regex pattern from content.
+// RemoveAddressPattern removes the address regex pattern from content
+// and trims any trailing whitespace and <br> tags left behind.
 func RemoveAddressPattern(content string) string {
-	return addressRegex.ReplaceAllString(content, "")
+	content = addressRegex.ReplaceAllString(content, "")
+
+	// Trim trailing <br> tags, spaces, and newlines that are no longer
+	// needed once the address (the next paragraph) has been removed.
+	for {
+		trimmed := strings.TrimRight(content, " \t\n")
+		trimmed = strings.TrimSuffix(trimmed, "<br>")
+		if trimmed == content {
+			break
+		}
+		content = trimmed
+	}
+	return content
 }
 
 // Post represents a Zola blog post

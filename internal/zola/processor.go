@@ -11,6 +11,7 @@ import (
 var (
 	codeBlockWithLangRegex = regexp.MustCompile(`<pre><code class="language-(.*?)">([\s\S]*?)</code></pre>`)
 	codeBlockNoLangRegex   = regexp.MustCompile(`<pre><code>([\s\S]*?)</code></pre>`)
+	newlineRunRegex        = regexp.MustCompile(`\n+`)
 	addressRegex           = regexp.MustCompile(`(?m)(\s\s\n)?0x[0-9a-fA-F]+\n?$`)
 )
 
@@ -47,7 +48,22 @@ func ProcessContent(content string) string {
 		return placeholder
 	})
 
-	content = strings.ReplaceAll(content, "\n", "  \n")
+	// Convert newlines to Zola-compatible format:
+	// - Single \n → trailing two spaces + \n (markdown hard line break)
+	// - Double \n\n → paragraph break
+	// - Triple+ \n{3,} → paragraph break + <br> for each extra line
+	//   (CommonMark collapses multiple blank lines into one paragraph break,
+	//   so <br> tags are needed to preserve extra vertical spacing)
+	content = newlineRunRegex.ReplaceAllStringFunc(content, func(match string) string {
+		n := len(match)
+		if n == 1 {
+			return "  \n"
+		}
+		if n == 2 {
+			return "  \n  \n"
+		}
+		return strings.Repeat("<br>", n-2) + "  \n  \n"
+	})
 
 	for placeholder, codeBlock := range codeBlockPlaceholders {
 		content = strings.ReplaceAll(content, placeholder, codeBlock)

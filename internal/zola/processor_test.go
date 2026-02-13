@@ -31,6 +31,33 @@ func TestProcessContent_LineBreaks(t *testing.T) {
 	}
 }
 
+func TestProcessContent_DoubleLineBreaks(t *testing.T) {
+	input := "Paragraph 1\n\nParagraph 2"
+	expected := "Paragraph 1  \n  \nParagraph 2"
+	result := ProcessContent(input)
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestProcessContent_MultipleLineBreaks(t *testing.T) {
+	input := "Paragraph 1\n\n\nParagraph 2"
+	expected := "Paragraph 1<br>  \n  \nParagraph 2"
+	result := ProcessContent(input)
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestProcessContent_ManyLineBreaks(t *testing.T) {
+	input := "Paragraph 1\n\n\n\n\nParagraph 2"
+	expected := "Paragraph 1<br><br><br>  \n  \nParagraph 2"
+	result := ProcessContent(input)
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
 // Note: Spoiler tag tests removed - Telegram sends MessageEntitySpoiler entities,
 // not HTML tags. EntitiesToHTML converts these to <span class="spoiler"> directly.
 

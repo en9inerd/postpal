@@ -67,7 +67,6 @@ func (s *Service) Clone(ctx context.Context) error {
 		Auth:          s.auth(),
 		ReferenceName: plumbing.NewBranchReferenceName(s.branch),
 		SingleBranch:  true,
-		Depth:         1,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)

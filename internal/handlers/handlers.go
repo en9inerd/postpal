@@ -331,20 +331,7 @@ func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
 
 	h.logger.Info("deleting posts", "ids", ids, "revoke", revoke)
 
-	if err := h.zola.DeletePost(ctx, ids); err != nil {
-		if errors.Is(err, zola.ErrNoPostsDeleted) {
-			return ctx.Reply("No matching posts found")
-		}
-		h.logger.Error("failed to delete posts", "ids", ids, "error", err)
-		return ctx.Reply(fmt.Sprintf("Error deleting post(s): %v", err))
-	}
-
-	if err := h.git.CommitAndPush(ctx, fmt.Sprintf("Delete post(s): %s", ids)); err != nil {
-		h.logger.Error("failed to commit and push", "error", err)
-		return ctx.Reply(fmt.Sprintf("Error committing deletion: %v", err))
-	}
-
-	// Optionally revoke from Telegram
+	// Revoke from Telegram first (independent of blog post existence)
 	if revoke {
 		var msgIDs []int
 		for idStr := range strings.SplitSeq(ids, ",") {
@@ -363,6 +350,22 @@ func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
 				h.logger.Warn("failed to delete messages from channel", "error", err)
 			}
 		}
+	}
+
+	if err := h.zola.DeletePost(ctx, ids); err != nil {
+		if errors.Is(err, zola.ErrNoPostsDeleted) {
+			if revoke {
+				return ctx.Reply(fmt.Sprintf("Revoked post(s) from Telegram: %s (already deleted from blog)", ids))
+			}
+			return ctx.Reply("No matching posts found")
+		}
+		h.logger.Error("failed to delete posts", "ids", ids, "error", err)
+		return ctx.Reply(fmt.Sprintf("Error deleting post(s): %v", err))
+	}
+
+	if err := h.git.CommitAndPush(ctx, fmt.Sprintf("Delete post(s): %s", ids)); err != nil {
+		h.logger.Error("failed to commit and push", "error", err)
+		return ctx.Reply(fmt.Sprintf("Error committing deletion: %v", err))
 	}
 
 	return ctx.Reply(fmt.Sprintf("Deleted post(s): %s", ids))

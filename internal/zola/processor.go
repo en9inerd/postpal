@@ -51,9 +51,11 @@ func ProcessContent(content string) string {
 	// Convert newlines to Zola-compatible format:
 	// - Single \n → trailing two spaces + \n (markdown hard line break)
 	// - Double \n\n → paragraph break
-	// - Triple+ \n{3,} → paragraph break + <br> for each extra line
-	//   (CommonMark collapses multiple blank lines into one paragraph break,
-	//   so <br> tags are needed to preserve extra vertical spacing)
+	// - Triple+ \n{3,} → paragraph break + <br> prepended to next paragraph
+	//   (CommonMark collapses multiple blank lines into one paragraph break;
+	//   <br> tags at the END of a <p> lose one visible line because the
+	//   paragraph's bottom margin overlaps the last <br>, so we place them
+	//   at the START of the next paragraph where they reliably render)
 	content = newlineRunRegex.ReplaceAllStringFunc(content, func(match string) string {
 		n := len(match)
 		if n == 1 {
@@ -62,7 +64,7 @@ func ProcessContent(content string) string {
 		if n == 2 {
 			return "  \n  \n"
 		}
-		return strings.Repeat("<br>", n-2) + "  \n  \n"
+		return "  \n  \n" + strings.Repeat("<br>", n-1)
 	})
 
 	for placeholder, codeBlock := range codeBlockPlaceholders {

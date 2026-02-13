@@ -3,7 +3,7 @@ module github.com/en9inerd/postpal
 go 1.25.7
 
 require (
-	github.com/en9inerd/telekit v0.2.0
+	github.com/en9inerd/telekit v0.2.1
 	github.com/go-git/go-git/v6 v6.0.0-20260210102253-e4d10f0e569a
 	github.com/gotd/td v0.139.0
 )

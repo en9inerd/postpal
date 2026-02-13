@@ -106,7 +106,7 @@ More text with <span class="spoiler">hidden content</span>.
 
 Final text.`
 	// Code blocks should preserve their internal formatting (no double spaces)
-	expected := "Here's some text  \nwith line breaks.  \n\n<blockquote>This is quoted<br>text</blockquote>  \n\nMore text with <span class=\"spoiler\">hidden content</span>.  \n\n```go\nfunc test() {\n    return true\n}\n```  \n\nFinal text."
+	expected := "Here's some text  \nwith line breaks.  \n  \n<blockquote>This is quoted<br>text</blockquote>  \n  \nMore text with <span class=\"spoiler\">hidden content</span>.  \n  \n```go\nfunc test() {\n    return true\n}\n```  \n  \nFinal text."
 	result := ProcessContent(input)
 	if result != expected {
 		t.Errorf("Expected %q, got %q", expected, result)

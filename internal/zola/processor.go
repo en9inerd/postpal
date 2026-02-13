@@ -48,7 +48,6 @@ func ProcessContent(content string) string {
 	})
 
 	content = strings.ReplaceAll(content, "\n", "  \n")
-	content = strings.ReplaceAll(content, "  \n  \n", "  \n\n")
 
 	for placeholder, codeBlock := range codeBlockPlaceholders {
 		content = strings.ReplaceAll(content, placeholder, codeBlock)

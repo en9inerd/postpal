@@ -1,8 +1,9 @@
 # ---------- Build ----------
-FROM golang:1.25.7-alpine AS builder
+# Pin builder to the build machine's native platform so Go cross-compiles
+# natively instead of running under QEMU emulation.
+FROM --platform=$BUILDPLATFORM golang:1.25.7-alpine AS builder
 
-# Install packages with --no-scripts to avoid trigger errors in QEMU emulation
-RUN apk update && apk add --no-cache --no-scripts git ca-certificates
+RUN apk update && apk add --no-cache git ca-certificates
 
 WORKDIR /build
 
@@ -16,8 +17,8 @@ ARG TARGETOS
 ARG TARGETARCH
 
 RUN CGO_ENABLED=0 \
-    GOOS=${TARGETOS:-linux} \
-    GOARCH=${TARGETARCH:-amd64} \
+    GOOS=${TARGETOS} \
+    GOARCH=${TARGETARCH} \
     go build \
       -gcflags="all=-l -B" \
       -trimpath \
@@ -28,9 +29,8 @@ RUN CGO_ENABLED=0 \
 # ---------- Runtime ----------
 FROM alpine:3.23
 
-# Install packages with --no-scripts to avoid trigger errors in QEMU emulation
 RUN apk update && \
-    apk add --no-cache --no-scripts \
+    apk add --no-cache \
         ca-certificates \
         tzdata
 

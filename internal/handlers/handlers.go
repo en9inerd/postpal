@@ -14,6 +14,8 @@ import (
 	"github.com/en9inerd/postpal/internal/zola"
 	"github.com/en9inerd/telekit"
 	"github.com/gotd/td/telegram/downloader"
+	"github.com/gotd/td/telegram/message"
+	"github.com/gotd/td/telegram/message/styling"
 	"github.com/gotd/td/tg"
 )
 
@@ -70,6 +72,12 @@ func (h *Handlers) Register() {
 		},
 		Locked: true,
 	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleDeletePost)
+
+	h.bot.CommandWithFilter(telekit.CommandDef{
+		Name:        "address",
+		Description: "Show current and next post address",
+		Scope:       authorScope,
+	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleAddress)
 
 	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "sync_channel_info",
@@ -319,10 +327,29 @@ func getPhotoSizeType(size tg.PhotoSizeClass) string {
 
 func (h *Handlers) handleStart(ctx *telekit.Context) error {
 	msg := `Available commands:
+/address - Show current and next post address
 /delete_post ids=123,456 [revoke=true] - Delete post(s) from blog
 /sync_channel_info [logo=true] - Sync channel info`
 
 	return ctx.Reply(msg)
+}
+
+func (h *Handlers) handleAddress(ctx *telekit.Context) error {
+	current, next, err := h.zola.GetLatestAddress()
+	if err != nil {
+		return ctx.Reply(fmt.Sprintf("Error: %v", err))
+	}
+
+	sender := message.NewSender(ctx.API())
+	peer := &tg.InputPeerUser{UserID: h.author.ID, AccessHash: h.author.AccessHash}
+
+	_, err = sender.To(peer).Reply(ctx.MessageID()).StyledText(ctx,
+		styling.Plain("Current: "),
+		styling.Code(current),
+		styling.Plain("\nNext:    "),
+		styling.Code(next),
+	)
+	return err
 }
 
 func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {

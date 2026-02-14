@@ -389,7 +389,7 @@ func getImageFormat(data []byte) string {
 	return "jpg"
 }
 
-// GetLatestAddress scans all posts and returns the most recent hex address
+// GetLatestAddress returns the most recent hex address found in posts
 // and the next incremented address.
 func (s *Service) GetLatestAddress() (current, next string, err error) {
 	entries, err := os.ReadDir(s.postsDir)
@@ -397,10 +397,8 @@ func (s *Service) GetLatestAddress() (current, next string, err error) {
 		return "", "", fmt.Errorf("failed to read posts directory: %w", err)
 	}
 
-	var latestID int64
-	var latestAddress string
-
-	for _, entry := range entries {
+	for i := len(entries) - 1; i >= 0; i-- {
+		entry := entries[i]
 		name := entry.Name()
 
 		var idStr string
@@ -416,8 +414,7 @@ func (s *Service) GetLatestAddress() (current, next string, err error) {
 			continue
 		}
 
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
+		if _, err := strconv.ParseInt(idStr, 10, 64); err != nil {
 			continue
 		}
 
@@ -453,25 +450,25 @@ func (s *Service) GetLatestAddress() (current, next string, err error) {
 				start := strings.LastIndex(value, "[0x")
 				end := strings.LastIndex(value, "]")
 				if start >= 0 && end > start {
-					addr := value[start+1 : end]
-					if id > latestID {
-						latestID = id
-						latestAddress = addr
-					}
+					current = value[start+1 : end]
 				}
 				break
 			}
 		}
+
+		if current != "" {
+			break
+		}
 	}
 
-	if latestAddress == "" {
+	if current == "" {
 		return "", "", fmt.Errorf("no address found in any post")
 	}
 
-	hexStr := latestAddress[2:]
+	hexStr := current[2:]
 	addrVal, err := strconv.ParseUint(hexStr, 16, 64)
 	if err != nil {
-		return latestAddress, "", fmt.Errorf("failed to parse address %s: %w", latestAddress, err)
+		return current, "", fmt.Errorf("failed to parse address %s: %w", current, err)
 	}
 
 	nextVal := addrVal + 1
@@ -479,9 +476,9 @@ func (s *Service) GetLatestAddress() (current, next string, err error) {
 	if strings.ToUpper(hexStr) == hexStr {
 		format = "0x%0*X"
 	}
-	nextAddress := fmt.Sprintf(format, len(hexStr), nextVal)
+	next = fmt.Sprintf(format, len(hexStr), nextVal)
 
-	return latestAddress, nextAddress, nil
+	return current, next, nil
 }
 
 // SaveChannelLogo saves the channel logo to the static directory

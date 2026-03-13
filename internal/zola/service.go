@@ -404,8 +404,8 @@ func (s *Service) GetLatestAddress() (current, next string, err error) {
 		var idStr string
 		if entry.IsDir() {
 			idStr = name
-		} else if strings.HasSuffix(name, ".md") {
-			idStr = strings.TrimSuffix(name, ".md")
+		} else if before, ok := strings.CutSuffix(name, ".md"); ok {
+			idStr = before
 		} else {
 			continue
 		}
@@ -437,7 +437,7 @@ func (s *Service) GetLatestAddress() (current, next string, err error) {
 		}
 
 		frontMatter := parts[1]
-		for _, line := range strings.Split(frontMatter, "\n") {
+		for line := range strings.SplitSeq(frontMatter, "\n") {
 			line = strings.TrimSpace(line)
 			if strings.HasPrefix(line, "title") {
 				_, value, found := strings.Cut(line, "=")

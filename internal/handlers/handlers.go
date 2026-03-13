@@ -241,12 +241,11 @@ func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Me
 
 	switch media := msg.Media.(type) {
 	case *tg.MessageMediaPhoto:
-		photo, ok := media.Photo.(*tg.Photo)
+		photo, ok := media.Photo.AsNotEmpty()
 		if !ok {
 			return nil, nil
 		}
 
-		// Get appropriate size (thumb index 2 or last available)
 		thumbIndex := 2
 		if len(photo.Sizes) <= thumbIndex {
 			thumbIndex = len(photo.Sizes) - 1
@@ -259,7 +258,7 @@ func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Me
 			ID:            photo.ID,
 			AccessHash:    photo.AccessHash,
 			FileReference: photo.FileReference,
-			ThumbSize:     getPhotoSizeType(photo.Sizes[thumbIndex]),
+			ThumbSize:     photo.Sizes[thumbIndex].GetType(),
 		}
 
 		if _, err := d.Download(api, loc).Stream(ctx, &buf); err != nil {
@@ -267,12 +266,11 @@ func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Me
 		}
 
 	case *tg.MessageMediaDocument:
-		doc, ok := media.Document.(*tg.Document)
+		doc, ok := media.Document.AsNotEmpty()
 		if !ok {
 			return nil, nil
 		}
 
-		// Check if it's a video/gif - download thumbnail
 		isVideo := false
 		for _, attr := range doc.Attributes {
 			if _, ok := attr.(*tg.DocumentAttributeVideo); ok {
@@ -286,12 +284,8 @@ func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Me
 		}
 
 		if isVideo && len(doc.Thumbs) > 0 {
-			loc := &tg.InputDocumentFileLocation{
-				ID:            doc.ID,
-				AccessHash:    doc.AccessHash,
-				FileReference: doc.FileReference,
-				ThumbSize:     getPhotoSizeType(doc.Thumbs[0]),
-			}
+			loc := doc.AsInputDocumentFileLocation()
+			loc.ThumbSize = doc.Thumbs[0].GetType()
 
 			if _, err := d.Download(api, loc).Stream(ctx, &buf); err != nil {
 				return nil, fmt.Errorf("failed to download video thumb: %w", err)
@@ -307,22 +301,6 @@ func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Me
 	}
 
 	return buf.Bytes(), nil
-}
-
-// getPhotoSizeType extracts the size type string from PhotoSizeClass
-func getPhotoSizeType(size tg.PhotoSizeClass) string {
-	switch s := size.(type) {
-	case *tg.PhotoSize:
-		return s.Type
-	case *tg.PhotoCachedSize:
-		return s.Type
-	case *tg.PhotoStrippedSize:
-		return s.Type
-	case *tg.PhotoSizeProgressive:
-		return s.Type
-	default:
-		return "x"
-	}
 }
 
 func (h *Handlers) handleStart(ctx *telekit.Context) error {
@@ -369,11 +347,9 @@ func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
 		}
 
 		if len(msgIDs) > 0 {
-			_, err := ctx.API().ChannelsDeleteMessages(ctx, &tg.ChannelsDeleteMessagesRequest{
-				Channel: &tg.InputChannel{ChannelID: h.channel.ID, AccessHash: h.channel.AccessHash},
-				ID:      msgIDs,
-			})
-			if err != nil {
+			sender := message.NewSender(ctx.API())
+			peer := &tg.InputPeerChannel{ChannelID: h.channel.ID, AccessHash: h.channel.AccessHash}
+			if _, err := sender.To(peer).Revoke().Messages(ctx, msgIDs...); err != nil {
 				h.logger.Warn("failed to delete messages from channel", "error", err)
 			}
 		}
@@ -416,7 +392,7 @@ func (h *Handlers) handleSyncChannelInfo(ctx *telekit.Context) error {
 		}
 
 		if full, ok := channelFull.FullChat.(*tg.ChannelFull); ok {
-			if photo, ok := full.ChatPhoto.(*tg.Photo); ok {
+			if photo, ok := full.ChatPhoto.AsNotEmpty(); ok {
 				logoData, err := h.downloadChannelPhoto(ctx, ctx.API(), photo)
 				if err != nil {
 					h.logger.Error("failed to download channel photo", "error", err)
@@ -448,17 +424,20 @@ func (h *Handlers) handleSyncChannelInfo(ctx *telekit.Context) error {
 }
 
 func (h *Handlers) downloadChannelPhoto(ctx context.Context, api *tg.Client, photo *tg.Photo) ([]byte, error) {
-	if photo == nil || len(photo.Sizes) == 0 {
+	if photo == nil {
 		return nil, nil
 	}
 
-	// Get the largest size
-	lastIdx := len(photo.Sizes) - 1
+	last, ok := tg.PhotoSizeClassArray(photo.Sizes).Last()
+	if !ok {
+		return nil, nil
+	}
+
 	loc := &tg.InputPhotoFileLocation{
 		ID:            photo.ID,
 		AccessHash:    photo.AccessHash,
 		FileReference: photo.FileReference,
-		ThumbSize:     getPhotoSizeType(photo.Sizes[lastIdx]),
+		ThumbSize:     last.GetType(),
 	}
 
 	d := downloader.NewDownloader()

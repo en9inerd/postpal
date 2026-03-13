@@ -46,7 +46,7 @@ go.work
 .LSOverride
 
 # Icon must end with two \r
-Icon
+Icon
 
 # Thumbnails
 ._*
@@ -98,6 +98,7 @@ tags
 .env
 
 # Produced files
+build
 dist
 repo
 session

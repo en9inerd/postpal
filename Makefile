@@ -1,7 +1,8 @@
 GO=go
+BUILD_DIR=build
 DIST_DIR=dist
 BINARY_NAME=$(shell basename $(PWD))
-BINARY_PATH=$(DIST_DIR)/$(BINARY_NAME)
+BINARY_PATH=$(BUILD_DIR)/$(BINARY_NAME)
 
 all: build
 
@@ -12,6 +13,7 @@ build-prod:
 	bash scripts/build.sh
 
 clean:
+	rm -rf $(BUILD_DIR)
 	rm -rf $(DIST_DIR)
 
 format:

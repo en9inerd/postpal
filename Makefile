@@ -7,7 +7,7 @@ BINARY_PATH=$(BUILD_DIR)/$(BINARY_NAME)
 all: build
 
 build:
-	$(GO) build -o $(BINARY_PATH) ./cmd/app/
+	$(GO) build -o $(BINARY_PATH) ./cmd/postpal/
 
 build-prod:
 	bash scripts/build.sh
@@ -23,10 +23,10 @@ test:
 	$(GO) test -v ./...
 
 run:
-	@test -f .env && set -a && . ./.env && set +a; $(GO) run ./cmd/app
+	@test -f .env && set -a && . ./.env && set +a; $(GO) run ./cmd/postpal
 
 run-verbose:
-	@test -f .env && set -a && . ./.env && set +a; $(GO) run ./cmd/app --verbose
+	@test -f .env && set -a && . ./.env && set +a; $(GO) run ./cmd/postpal --verbose
 
 # Docker targets
 docker-build:

@@ -24,7 +24,7 @@ RUN CGO_ENABLED=0 \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
       -o /app \
-      ./cmd/app
+      ./cmd/postpal
 
 # ---------- Runtime ----------
 FROM alpine:3.23

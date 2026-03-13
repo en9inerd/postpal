@@ -172,7 +172,7 @@ images = ["image_0.jpg", "image_1.png"]
 
 ```
 postpal/
-├── cmd/app/           # Entry point
+├── cmd/postpal/       # Entry point
 ├── internal/
 │   ├── config/        # Configuration
 │   ├── git/           # Git operations

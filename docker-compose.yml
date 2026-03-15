@@ -25,6 +25,7 @@ services:
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-PostPal}
       - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-bot@postpal.dev}
       - ZOLA_POSTS_DIR=${ZOLA_POSTS_DIR:-content/posts}
+      - POSTPAL_VERBOSE=${POSTPAL_VERBOSE:-false}
 
 volumes:
   session:

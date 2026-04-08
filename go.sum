@@ -25,6 +25,8 @@ github.com/emirpasic/gods v1.18.1 h1:FXtiHYKDGKCW2KzwZKx0iC0PQmdlorYgdFG9jPXJ1Bc
 github.com/emirpasic/gods v1.18.1/go.mod h1:8tpGGwCnJ5H4r6BWwaV6OrWmMoPhUl5jm/FMNAnJvWQ=
 github.com/en9inerd/telekit v0.2.3 h1:vmxUqjnz5xYKxKVndOnFxmQ4Uuh5KZ0098CSJEDok3Q=
 github.com/en9inerd/telekit v0.2.3/go.mod h1:k4uWPvQme3uEAN7XDmRqhcARe5eRgzN5WwlO6rzLzJc=
+github.com/en9inerd/telekit v0.2.4 h1:jw/1huOjPDq4WExTeyttRhE/GbuPh4Ez+Ma3ScVxSjw=
+github.com/en9inerd/telekit v0.2.4/go.mod h1:k4uWPvQme3uEAN7XDmRqhcARe5eRgzN5WwlO6rzLzJc=
 github.com/fatih/color v1.18.0 h1:S8gINlzdQ840/4pfAwic/ZE0djQEH3wM94VfqLTZcOM=
 github.com/fatih/color v1.18.0/go.mod h1:4FelSpRwEGDpQ12mAdzqdOukCy4u8WUtOY6lkT/6HfU=
 github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=

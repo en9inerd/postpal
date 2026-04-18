@@ -146,7 +146,7 @@ func TestService_EditPost_FindClosestID(t *testing.T) {
 
 	postsDir := filepath.Join(tempDir, "content", "posts")
 
-	// Create album post at 100 (directory with index.md) — album has messages 100-103
+	// Create album post at 100 (directory with index.md) - album has messages 100-103
 	albumDir := filepath.Join(postsDir, "100")
 	if err := os.MkdirAll(albumDir, 0755); err != nil {
 		t.Fatalf("failed to create album directory: %v", err)

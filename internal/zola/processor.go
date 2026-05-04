@@ -94,9 +94,9 @@ func replaceCodeBlocks(content string) (string, map[string]string) {
 }
 
 // convertNewlines converts newline runs to Zola-compatible format:
-//   - Single \n → trailing two spaces + \n (markdown hard line break)
-//   - Double \n\n → paragraph break
-//   - Triple+ \n{3,} → paragraph break + <br> prepended to next paragraph
+//   - Single \n -> trailing two spaces + \n (markdown hard line break)
+//   - Double \n\n -> paragraph break
+//   - Triple+ \n{3,} -> paragraph break + <br> prepended to next paragraph
 //     (CommonMark collapses multiple blank lines into one paragraph break;
 //     <br> tags at the END of a <p> lose one visible line because the
 //     paragraph's bottom margin overlaps the last <br>, so we place them

@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/en9inerd/postpal/internal/log"
 	"github.com/en9inerd/postpal/internal/zola"
 	"github.com/en9inerd/telekit"
+	goplugin "github.com/go-git/go-git/v6/x/plugin"
+	xconfig "github.com/go-git/go-git/v6/x/plugin/config"
 )
 
 var version = "dev"
@@ -91,35 +94,39 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 	bot.OnReady(func(ctx context.Context) {
 		logger.Info("bot ready, resolving identifiers")
 
-		channelID, channelAccessHash, channelTitle, err := bot.ResolveIdentifier(ctx, cfg.Channel, true)
+		channel, err := bot.ResolveChannelInfo(ctx, cfg.Channel)
 		if err != nil {
 			logger.Error("failed to resolve channel", "channel", cfg.Channel, "error", err)
 			cancel()
 			return
 		}
 
-		authorID, authorAccessHash, _, err := bot.ResolveIdentifier(ctx, cfg.Author, false)
+		author, err := bot.ResolveUserInfo(ctx, cfg.Author)
 		if err != nil {
 			logger.Error("failed to resolve author", "author", cfg.Author, "error", err)
 			cancel()
 			return
 		}
 
-		logger.Info("resolved identifiers", "channel_id", channelID, "channel_title", channelTitle, "author_id", authorID)
+		logger.Info("resolved identifiers", "channel_id", channel.ID, "channel_username", channel.Username, "channel_title", channel.Title, "author_id", author.ID)
 
 		postsDir := filepath.Join(cfg.GitRepoDir, cfg.ZolaPostsDir)
+		channelName := channel.Title
+		if channelName == "" {
+			channelName = strconv.FormatInt(channel.ID, 10)
+		}
 		zolaSvc := zola.NewService(
 			postsDir,
 			cfg.ZolaPostsDir,
 			cfg.GitRepoDir,
-			channelTitle,
+			channelName,
 			gitSvc,
 			logger,
 		)
 
 		h := handlers.New(bot, gitSvc, zolaSvc,
-			handlers.PeerRef{ID: channelID, AccessHash: channelAccessHash},
-			handlers.PeerRef{ID: authorID, AccessHash: authorAccessHash},
+			handlers.PeerRef{ID: channel.ID, AccessHash: channel.AccessHash, Username: channel.Username},
+			handlers.PeerRef{ID: author.ID, AccessHash: author.AccessHash},
 			logger,
 		)
 		h.Register()
@@ -172,6 +179,9 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 }
 
 func main() {
+	_ = goplugin.Register(goplugin.ConfigLoader(), func() goplugin.ConfigSource {
+		return xconfig.NewEmpty()
+	})
 	ctx := context.Background()
 	if err := run(ctx, os.Args, os.Getenv); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

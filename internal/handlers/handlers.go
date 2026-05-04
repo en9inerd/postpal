@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 type PeerRef struct {
 	ID         int64
 	AccessHash int64
+	Username   string
 }
 
 // Handlers manages bot event handlers
@@ -35,7 +37,6 @@ type Handlers struct {
 	logger  *slog.Logger
 }
 
-// New creates a new Handlers instance
 func New(bot *telekit.Bot, gitSvc *git.Service, zolaSvc *zola.Service, channel, author PeerRef, logger *slog.Logger) *Handlers {
 	return &Handlers{
 		bot:     bot,
@@ -212,8 +213,14 @@ func (h *Handlers) processMessages(ctx *telekit.Context, messages []*tg.Message)
 
 	for _, msg := range messages {
 		if msg.Message != "" {
-			htmlContent := telekit.EntitiesToHTML(msg.Message, msg.Entities)
-			post.Content = htmlContent
+			post.Content = telekit.EntitiesToHTML(msg.Message, msg.Entities, telekit.Options{
+				HashtagHref: func(tag string) string {
+					if h.channel.Username == "" {
+						return ""
+					}
+					return "https://t.me/s/" + h.channel.Username + "?q=%23" + url.QueryEscape(tag)
+				},
+			})
 		}
 
 		if msg.Media != nil {

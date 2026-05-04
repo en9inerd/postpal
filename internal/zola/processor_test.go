@@ -59,7 +59,7 @@ func TestProcessContent_ManyLineBreaks(t *testing.T) {
 }
 
 // Note: Spoiler tag tests removed - Telegram sends MessageEntitySpoiler entities,
-// not HTML tags. EntitiesToHTML converts these to <span class="spoiler"> directly.
+// not HTML tags. EntitiesToHTML converts these to <span class="spoiler"> directly
 
 func TestProcessContent_InlineCode(t *testing.T) {
 	input := "Use <code>fmt.Println()</code> to print"
@@ -284,7 +284,7 @@ func TestRemoveAddressPattern_TrailingBrTags(t *testing.T) {
 }
 
 func TestRemoveAddressPattern_ProcessedWithAddress(t *testing.T) {
-	// "Text\n\n0xABC" → after ProcessContent → "Text  \n  \n0xABC"
+	// "Text\n\n0xABC" -> after ProcessContent -> "Text  \n  \n0xABC"
 	content := "Text  \n  \n0xABC1234"
 	result := RemoveAddressPattern(content)
 	expected := "Text"

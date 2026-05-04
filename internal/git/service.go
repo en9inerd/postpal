@@ -12,6 +12,7 @@ import (
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/client"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport/http"
 )
@@ -51,11 +52,13 @@ func (s *Service) RepoExists() bool {
 	return err == nil
 }
 
-// auth returns HTTP basic auth credentials for git operations.
-func (s *Service) auth() *http.BasicAuth {
-	return &http.BasicAuth{
-		Username: "token",
-		Password: s.authToken,
+// auth returns HTTP basic auth credentials for git operations
+func (s *Service) auth() []client.Option {
+	return []client.Option{
+		client.WithHTTPAuth(&http.BasicAuth{
+			Username: "token",
+			Password: s.authToken,
+		}),
 	}
 }
 
@@ -64,7 +67,7 @@ func (s *Service) Clone(ctx context.Context) error {
 	s.logger.Info("cloning repository", "url", s.repoURL, "branch", s.branch)
 	repo, err := git.PlainCloneContext(ctx, s.repoDir, &git.CloneOptions{
 		URL:           s.repoURL,
-		Auth:          s.auth(),
+		ClientOptions: s.auth(),
 		ReferenceName: plumbing.NewBranchReferenceName(s.branch),
 		SingleBranch:  true,
 	})
@@ -123,7 +126,7 @@ func (s *Service) Pull(ctx context.Context) error {
 		RemoteName:    "origin",
 		ReferenceName: plumbing.NewBranchReferenceName(s.branch),
 		SingleBranch:  true,
-		Auth:          s.auth(),
+		ClientOptions: s.auth(),
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return fmt.Errorf("failed to pull: %w", err)
@@ -245,8 +248,8 @@ func (s *Service) Push(ctx context.Context) error {
 	}
 
 	err = repo.PushContext(ctx, &git.PushOptions{
-		RemoteName: "origin",
-		Auth:       s.auth(),
+		RemoteName:    "origin",
+		ClientOptions: s.auth(),
 		RefSpecs: []config.RefSpec{
 			config.RefSpec(fmt.Sprintf("refs/heads/%s:refs/heads/%s", s.branch, s.branch)),
 		},

@@ -9,9 +9,9 @@ import (
 // Regression tests (TC-054 to TC-056)
 // =============================================================================
 
-// Note: Legacy <spoiler> and <tg-spoiler> tag tests removed.
-// Telegram sends MessageEntitySpoiler entities, not HTML tags.
-// EntitiesToHTML converts these to <span class="spoiler"> directly.
+// Note: Legacy <spoiler> and <tg-spoiler> tag tests removed
+// Telegram sends MessageEntitySpoiler entities, not HTML tags
+// EntitiesToHTML converts these to <span class="spoiler"> directly
 
 func TestProcessContent_CodeBlockTrailingNewline(t *testing.T) {
 	input := "<pre><code class=\"language-go\">code here\n</code></pre>"
@@ -24,7 +24,7 @@ func TestProcessContent_CodeBlockTrailingNewline(t *testing.T) {
 }
 
 // Note: Blockquote newline conversion is now tested in TestEntitiesToHTML_BlockquoteMultiline
-// since it's handled by EntitiesToHTML, not ProcessContent.
+// since it's handled by EntitiesToHTML, not ProcessContent
 
 // =============================================================================
 // Table-driven tests for comprehensive coverage

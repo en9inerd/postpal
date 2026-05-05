@@ -24,9 +24,6 @@ RUN CGO_ENABLED=0 \
       -o /postpal \
       ./cmd/postpal
 
-RUN mkdir -p /app/session /app/repo \
-    && chown -R 65532:65532 /app
-
 # ---------- Runtime ----------
 FROM gcr.io/distroless/static-debian12:nonroot
 
@@ -34,6 +31,9 @@ WORKDIR /app
 
 COPY --from=builder /postpal /app/postpal
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+USER root
+RUN mkdir -p /app/session /app/repo && chown -R 65532:65532 /app
 
 USER nonroot:nonroot
 

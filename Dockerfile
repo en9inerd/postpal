@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 \
       -gcflags="all=-l -B" \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
-      -o /app \
+      -o /app/postpal \
       ./cmd/postpal
 
 RUN mkdir -p /app/session /app/repo \

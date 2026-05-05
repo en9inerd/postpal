@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/en9inerd/go-pkgs/healthcheck"
 	"github.com/en9inerd/postpal/internal/config"
 	"github.com/en9inerd/postpal/internal/git"
 	"github.com/en9inerd/postpal/internal/handlers"
@@ -51,20 +52,27 @@ func versionString() string {
 }
 
 func run(ctx context.Context, args []string, getenv func(string) string) error {
+	cfg, err := config.ParseConfig(getenv)
+	if err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
 	for _, a := range args[1:] {
 		if a == "--version" || a == "-version" {
 			fmt.Println(versionString())
+			return nil
+		}
+
+		if a == "--healthcheck" {
+			if err := healthcheck.Check(":8080", false); err != nil {
+				return err
+			}
 			return nil
 		}
 	}
 
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-
-	cfg, err := config.ParseConfig(getenv)
-	if err != nil {
-		return fmt.Errorf("failed to parse config: %w", err)
-	}
 
 	logger := log.NewLogger(cfg.Verbose)
 	logger.Info("starting postpal", "version", version)

@@ -1,6 +1,4 @@
 # ---------- Build ----------
-# Pin builder to the build machine's native platform so Go cross-compiles
-# natively instead of running under QEMU emulation.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 RUN apk update && apk add --no-cache git ca-certificates
@@ -27,26 +25,18 @@ RUN CGO_ENABLED=0 \
       ./cmd/postpal
 
 # ---------- Runtime ----------
-FROM alpine:3.23
-
-RUN apk update && \
-    apk add --no-cache \
-        ca-certificates \
-        tzdata
-
-RUN addgroup -S app && adduser -S app -G app
+FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-# Create directories for session and repo storage
-RUN mkdir -p /app/session /app/repo && chown -R app:app /app
-
 COPY --from=builder /app /app/postpal
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-USER app
+USER nonroot:nonroot
 
 EXPOSE 8080
 
-HEALTHCHECK CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD ["/app/postpal", "--healthcheck"]
 
-CMD ["/app/postpal"]
+ENTRYPOINT ["/app/postpal"]

@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 \
       -gcflags="all=-l -B" \
       -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
-      -o /app \
+      -o /postpal \
       ./cmd/postpal
 
 RUN mkdir -p /app/session /app/repo \
@@ -32,7 +32,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-COPY --from=builder /app /app
+COPY --from=builder /postpal /app/postpal
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 USER nonroot:nonroot

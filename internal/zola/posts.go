@@ -284,13 +284,10 @@ func (s *Service) getEditablePostID(postID int64) (int64, error) {
 	var postIDs []int64
 	for _, entry := range entries {
 		name := entry.Name()
-		if strings.Contains(name, "index") {
-			continue
-		}
 
 		idStr, _, _ := strings.Cut(name, ".")
 		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
+		if err != nil || id <= 0 {
 			continue
 		}
 		postIDs = append(postIDs, id)

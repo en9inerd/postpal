@@ -36,12 +36,8 @@ func (s *Service) GetLatestAddress() (current, next string, err error) {
 			continue
 		}
 
-		if strings.HasPrefix(idStr, "_") {
-			continue
-		}
-
 		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
+		if err != nil || id <= 0 {
 			continue
 		}
 

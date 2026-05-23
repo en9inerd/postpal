@@ -1,23 +1,11 @@
 package handlers
 
 import (
-	"bytes"
-	"context"
-	"errors"
-	"fmt"
 	"log/slog"
-	"net/url"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/en9inerd/postpal/internal/git"
 	"github.com/en9inerd/postpal/internal/zola"
 	"github.com/en9inerd/telekit"
-	"github.com/gotd/td/telegram/downloader"
-	"github.com/gotd/td/telegram/message"
-	"github.com/gotd/td/telegram/message/styling"
-	"github.com/gotd/td/tg"
 )
 
 // PeerRef identifies a Telegram peer (channel or user) by ID and access hash.
@@ -56,12 +44,13 @@ func (h *Handlers) Register() {
 
 	// Commands (visible only to author in menu, executable only by author)
 	authorScope := telekit.ScopeUser{UserID: h.author.ID, AccessHash: h.author.AccessHash}
+	authorFilter := telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}
 
 	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "start",
 		Description: "Show available commands",
 		Scope:       authorScope,
-	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleStart)
+	}, authorFilter, h.handleStart)
 
 	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "delete_post",
@@ -72,13 +61,13 @@ func (h *Handlers) Register() {
 			"revoke": {Type: telekit.TypeBool, Default: false, Description: "Also delete from Telegram"},
 		},
 		Locked: true,
-	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleDeletePost)
+	}, authorFilter, h.handleDeletePost)
 
 	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "address",
 		Description: "Show current and next post address",
 		Scope:       authorScope,
-	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleAddress)
+	}, authorFilter, h.handleAddress)
 
 	h.bot.CommandWithFilter(telekit.CommandDef{
 		Name:        "sync_channel_info",
@@ -88,371 +77,6 @@ func (h *Handlers) Register() {
 			"logo": {Type: telekit.TypeBool, Default: true, Description: "Sync channel logo"},
 		},
 		Locked: true,
-	}, telekit.Filter{Users: []int64{h.author.ID}, Incoming: true}, h.handleSyncChannelInfo)
+	}, authorFilter, h.handleSyncChannelInfo)
 }
 
-func (h *Handlers) handleNewPost(ctx *telekit.Context) error {
-	msg := ctx.Message()
-	if msg == nil {
-		return nil
-	}
-
-	// Skip if part of album (handled separately)
-	if msg.GroupedID != 0 {
-		return nil
-	}
-
-	// Skip forwarded messages and service messages
-	if _, isFwd := msg.GetFwdFrom(); isFwd || msg.Date == 0 {
-		return nil
-	}
-
-	// Skip if no content
-	if msg.Message == "" && msg.Media == nil {
-		return nil
-	}
-
-	h.logger.Info("processing new post", "id", msg.ID)
-
-	post, mediaFiles, err := h.processMessages(ctx, []*tg.Message{msg})
-	if err != nil {
-		h.logger.Error("failed to process message", "error", err)
-		return err
-	}
-
-	if err := h.zola.CreatePost(ctx, post, mediaFiles); err != nil {
-		h.logger.Error("failed to create post", "error", err)
-		return err
-	}
-
-	if err := h.git.CommitAndPush(ctx, fmt.Sprintf("Add post: %d", post.ID)); err != nil {
-		h.logger.Error("failed to commit and push", "error", err)
-		return err
-	}
-
-	h.logger.Info("created post", "id", post.ID)
-	return nil
-}
-
-func (h *Handlers) handleEditPost(ctx *telekit.Context) error {
-	msg := ctx.Message()
-	if msg == nil {
-		return nil
-	}
-
-	h.logger.Info("processing edited post", "id", msg.ID)
-
-	post, mediaFiles, err := h.processMessages(ctx, []*tg.Message{msg})
-	if err != nil {
-		h.logger.Error("failed to process edited message", "error", err)
-		return err
-	}
-
-	var mediaFile []byte
-	if len(mediaFiles) > 0 {
-		mediaFile = mediaFiles[0]
-	}
-
-	if err := h.zola.EditPost(ctx, post, mediaFile); err != nil {
-		h.logger.Error("failed to edit post", "error", err)
-		return err
-	}
-
-	if err := h.git.CommitAndPush(ctx, fmt.Sprintf("Edit post: %d", post.ID)); err != nil {
-		h.logger.Error("failed to commit and push", "error", err)
-		return err
-	}
-
-	h.logger.Info("edited post", "id", post.ID)
-	return nil
-}
-
-func (h *Handlers) handleAlbum(ctx *telekit.Context) error {
-	messages := ctx.Messages()
-	if len(messages) < 2 {
-		return nil // Single message, not album
-	}
-
-	firstMsg := messages[0]
-	h.logger.Info("processing album", "id", firstMsg.ID, "count", len(messages))
-
-	post, mediaFiles, err := h.processMessages(ctx, messages)
-	if err != nil {
-		h.logger.Error("failed to process album", "error", err)
-		return err
-	}
-
-	if err := h.zola.CreatePost(ctx, post, mediaFiles); err != nil {
-		h.logger.Error("failed to create album post", "error", err)
-		return err
-	}
-
-	if err := h.git.CommitAndPush(ctx, fmt.Sprintf("Add album: %d", post.ID)); err != nil {
-		h.logger.Error("failed to commit and push", "error", err)
-		return err
-	}
-
-	h.logger.Info("created album post", "id", post.ID)
-	return nil
-}
-
-// processMessages converts Telegram messages to a Zola post
-func (h *Handlers) processMessages(ctx *telekit.Context, messages []*tg.Message) (zola.Post, [][]byte, error) {
-	if len(messages) == 0 {
-		return zola.Post{}, nil, errors.New("no messages to process")
-	}
-
-	firstMsg := messages[0]
-	post := zola.Post{
-		ID:   int64(firstMsg.ID),
-		Date: time.Unix(int64(firstMsg.Date), 0),
-	}
-
-	var mediaFiles [][]byte
-	api := ctx.API()
-
-	for _, msg := range messages {
-		if msg.Message != "" {
-			post.Content = telekit.EntitiesToHTML(msg.Message, msg.Entities, telekit.Options{
-				HashtagHref: func(tag string) string {
-					if h.channel.Username == "" {
-						return ""
-					}
-					return "https://t.me/s/" + h.channel.Username + "?q=%23" + url.QueryEscape(tag)
-				},
-			})
-		}
-
-		if msg.Media != nil {
-			mediaData, err := h.downloadMedia(ctx, api, msg)
-			if err != nil {
-				h.logger.Warn("failed to download media", "error", err)
-				continue
-			}
-			if mediaData != nil {
-				mediaFiles = append(mediaFiles, mediaData)
-			}
-		}
-	}
-
-	return post, mediaFiles, nil
-}
-
-func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Message) ([]byte, error) {
-	if msg.Media == nil {
-		return nil, nil
-	}
-
-	d := downloader.NewDownloader()
-	var buf bytes.Buffer
-
-	switch media := msg.Media.(type) {
-	case *tg.MessageMediaPhoto:
-		photo, ok := media.Photo.AsNotEmpty()
-		if !ok {
-			return nil, nil
-		}
-
-		thumbIndex := 2
-		if len(photo.Sizes) <= thumbIndex {
-			thumbIndex = len(photo.Sizes) - 1
-		}
-		if thumbIndex < 0 {
-			return nil, nil
-		}
-
-		loc := &tg.InputPhotoFileLocation{
-			ID:            photo.ID,
-			AccessHash:    photo.AccessHash,
-			FileReference: photo.FileReference,
-			ThumbSize:     photo.Sizes[thumbIndex].GetType(),
-		}
-
-		if _, err := d.Download(api, loc).Stream(ctx, &buf); err != nil {
-			return nil, fmt.Errorf("failed to download photo: %w", err)
-		}
-
-	case *tg.MessageMediaDocument:
-		doc, ok := media.Document.AsNotEmpty()
-		if !ok {
-			return nil, nil
-		}
-
-		isVideo := false
-		for _, attr := range doc.Attributes {
-			if _, ok := attr.(*tg.DocumentAttributeVideo); ok {
-				isVideo = true
-				break
-			}
-			if _, ok := attr.(*tg.DocumentAttributeAnimated); ok {
-				isVideo = true
-				break
-			}
-		}
-
-		if isVideo && len(doc.Thumbs) > 0 {
-			loc := doc.AsInputDocumentFileLocation()
-			loc.ThumbSize = doc.Thumbs[0].GetType()
-
-			if _, err := d.Download(api, loc).Stream(ctx, &buf); err != nil {
-				return nil, fmt.Errorf("failed to download video thumb: %w", err)
-			}
-		}
-
-	default:
-		return nil, nil
-	}
-
-	if buf.Len() == 0 {
-		return nil, nil
-	}
-
-	return buf.Bytes(), nil
-}
-
-func (h *Handlers) handleStart(ctx *telekit.Context) error {
-	msg := `Available commands:
-/address - Show current and next post address
-/delete_post ids=123,456 [revoke=true] - Delete post(s) from blog
-/sync_channel_info [logo=true] - Sync channel info`
-
-	return ctx.Reply(msg)
-}
-
-func (h *Handlers) handleAddress(ctx *telekit.Context) error {
-	current, next, err := h.zola.GetLatestAddress()
-	if err != nil {
-		return ctx.Reply(fmt.Sprintf("Error: %v", err))
-	}
-
-	sender := message.NewSender(ctx.API())
-	peer := &tg.InputPeerUser{UserID: h.author.ID, AccessHash: h.author.AccessHash}
-
-	_, err = sender.To(peer).Reply(ctx.MessageID()).StyledText(ctx,
-		styling.Plain("Current: "),
-		styling.Code(current),
-		styling.Plain("\nNext:    "),
-		styling.Code(next),
-	)
-	return err
-}
-
-func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
-	ids := ctx.Params().String("ids")
-	revoke := ctx.Params().Bool("revoke")
-
-	h.logger.Info("deleting posts", "ids", ids, "revoke", revoke)
-
-	// Revoke from Telegram first (independent of blog post existence)
-	if revoke {
-		var msgIDs []int
-		for idStr := range strings.SplitSeq(ids, ",") {
-			idStr = strings.TrimSpace(idStr)
-			if id, err := strconv.Atoi(idStr); err == nil {
-				msgIDs = append(msgIDs, id)
-			}
-		}
-
-		if len(msgIDs) > 0 {
-			sender := message.NewSender(ctx.API())
-			peer := &tg.InputPeerChannel{ChannelID: h.channel.ID, AccessHash: h.channel.AccessHash}
-			if _, err := sender.To(peer).Revoke().Messages(ctx, msgIDs...); err != nil {
-				h.logger.Warn("failed to delete messages from channel", "error", err)
-			}
-		}
-	}
-
-	if err := h.zola.DeletePost(ctx, ids); err != nil {
-		if errors.Is(err, zola.ErrNoPostsDeleted) {
-			if revoke {
-				return ctx.Reply(fmt.Sprintf("Revoked post(s) from Telegram: %s (already deleted from blog)", ids))
-			}
-			return ctx.Reply("No matching posts found")
-		}
-		h.logger.Error("failed to delete posts", "ids", ids, "error", err)
-		return ctx.Reply(fmt.Sprintf("Error deleting post(s): %v", err))
-	}
-
-	if err := h.git.CommitAndPush(ctx, fmt.Sprintf("Delete post(s): %s", ids)); err != nil {
-		h.logger.Error("failed to commit and push", "error", err)
-		return ctx.Reply(fmt.Sprintf("Error committing deletion: %v", err))
-	}
-
-	return ctx.Reply(fmt.Sprintf("Deleted post(s): %s", ids))
-}
-
-func (h *Handlers) handleSyncChannelInfo(ctx *telekit.Context) error {
-	syncLogo := ctx.Params().Bool("logo")
-
-	changed := false
-
-	if syncLogo {
-		h.logger.Info("syncing channel logo")
-
-		channelFull, err := ctx.API().ChannelsGetFullChannel(ctx, &tg.InputChannel{
-			ChannelID:  h.channel.ID,
-			AccessHash: h.channel.AccessHash,
-		})
-		if err != nil {
-			errMsg := fmt.Sprintf("Error getting channel info: %s", err.Error())
-			return ctx.Reply(errMsg)
-		}
-
-		if full, ok := channelFull.FullChat.(*tg.ChannelFull); ok {
-			if photo, ok := full.ChatPhoto.AsNotEmpty(); ok {
-				logoData, err := h.downloadChannelPhoto(ctx, ctx.API(), photo)
-				if err != nil {
-					h.logger.Error("failed to download channel photo", "error", err)
-					return ctx.Reply("Error downloading logo: " + err.Error())
-				}
-
-				if logoData != nil {
-					if err := h.zola.SaveChannelLogo(logoData); err != nil {
-						h.logger.Error("failed to save channel logo", "error", err)
-						return ctx.Reply("Error saving logo: " + err.Error())
-					}
-					h.logger.Info("saved channel logo")
-					changed = true
-				}
-			}
-		}
-	}
-
-	if !changed {
-		return ctx.Reply("No changes to sync")
-	}
-
-	if err := h.git.CommitAndPush(ctx, "Update channel info"); err != nil {
-		h.logger.Error("failed to commit channel info", "error", err)
-		return ctx.Reply("Error: " + err.Error())
-	}
-
-	return ctx.Reply("Channel info synced")
-}
-
-func (h *Handlers) downloadChannelPhoto(ctx context.Context, api *tg.Client, photo *tg.Photo) ([]byte, error) {
-	if photo == nil {
-		return nil, nil
-	}
-
-	last, ok := tg.PhotoSizeClassArray(photo.Sizes).Last()
-	if !ok {
-		return nil, nil
-	}
-
-	loc := &tg.InputPhotoFileLocation{
-		ID:            photo.ID,
-		AccessHash:    photo.AccessHash,
-		FileReference: photo.FileReference,
-		ThumbSize:     last.GetType(),
-	}
-
-	d := downloader.NewDownloader()
-	var buf bytes.Buffer
-
-	if _, err := d.Download(api, loc).Stream(ctx, &buf); err != nil {
-		return nil, fmt.Errorf("failed to download: %w", err)
-	}
-
-	return buf.Bytes(), nil
-}

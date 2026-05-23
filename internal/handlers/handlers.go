@@ -79,4 +79,3 @@ func (h *Handlers) Register() {
 		Locked: true,
 	}, authorFilter, h.handleSyncChannelInfo)
 }
-

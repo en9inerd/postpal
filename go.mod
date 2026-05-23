@@ -3,7 +3,8 @@ module github.com/en9inerd/postpal
 go 1.26.1
 
 require (
-	github.com/en9inerd/telekit v0.2.9
+	github.com/en9inerd/go-pkgs v0.5.2
+	github.com/en9inerd/telekit v0.2.10
 	github.com/go-git/go-git/v6 v6.0.0-alpha.2
 	github.com/gotd/td v0.143.0
 )
@@ -18,7 +19,6 @@ require (
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
-	github.com/en9inerd/go-pkgs v0.5.2 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-faster/errors v0.7.1 // indirect

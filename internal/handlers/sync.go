@@ -16,6 +16,10 @@ func (h *Handlers) handleSyncChannelInfo(ctx *telekit.Context) error {
 	changed := false
 
 	if syncLogo {
+		if err := h.git.Pull(ctx); err != nil {
+			h.logger.Warn("pre-operation pull failed", "error", err)
+		}
+
 		h.logger.Info("syncing channel logo")
 
 		channelFull, err := ctx.API().ChannelsGetFullChannel(ctx, &tg.InputChannel{

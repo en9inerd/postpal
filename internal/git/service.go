@@ -261,7 +261,7 @@ func (s *Service) Push(ctx context.Context) error {
 	return nil
 }
 
-// CommitAndPush commits and pushes in one operation
+// CommitAndPush commits and pushes in one operation.
 func (s *Service) CommitAndPush(ctx context.Context, message string) error {
 	if err := s.Commit(message); err != nil {
 		return err

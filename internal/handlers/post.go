@@ -37,6 +37,10 @@ func (h *Handlers) handleNewPost(ctx *telekit.Context) error {
 
 	h.logger.Info("processing new post", "id", msg.ID)
 
+	if err := h.git.Pull(ctx); err != nil {
+		h.logger.Warn("pre-operation pull failed", "error", err)
+	}
+
 	post, mediaFiles, err := h.processMessages(ctx, []*tg.Message{msg})
 	if err != nil {
 		h.logger.Error("failed to process message", "error", err)
@@ -64,6 +68,10 @@ func (h *Handlers) handleEditPost(ctx *telekit.Context) error {
 	}
 
 	h.logger.Info("processing edited post", "id", msg.ID)
+
+	if err := h.git.Pull(ctx); err != nil {
+		h.logger.Warn("pre-operation pull failed", "error", err)
+	}
 
 	post, mediaFiles, err := h.processMessages(ctx, []*tg.Message{msg})
 	if err != nil {
@@ -98,6 +106,10 @@ func (h *Handlers) handleAlbum(ctx *telekit.Context) error {
 
 	firstMsg := messages[0]
 	h.logger.Info("processing album", "id", firstMsg.ID, "count", len(messages))
+
+	if err := h.git.Pull(ctx); err != nil {
+		h.logger.Warn("pre-operation pull failed", "error", err)
+	}
 
 	post, mediaFiles, err := h.processMessages(ctx, messages)
 	if err != nil {

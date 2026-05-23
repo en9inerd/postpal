@@ -18,6 +18,10 @@ func (h *Handlers) handleDeletePost(ctx *telekit.Context) error {
 
 	h.logger.Info("deleting posts", "ids", ids, "revoke", revoke)
 
+	if err := h.git.Pull(ctx); err != nil {
+		h.logger.Warn("pre-operation pull failed", "error", err)
+	}
+
 	// Revoke from Telegram first (independent of blog post existence)
 	if revoke {
 		var msgIDs []int

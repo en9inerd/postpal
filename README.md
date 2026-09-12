@@ -52,7 +52,7 @@ Example Zola theme: [after-dark](https://github.com/en9inerd/after-dark)
 
 ### Prerequisites
 
-- Go 1.25+ (for building from source)
+- Go 1.27+ (for building from source)
 - Telegram API credentials from [my.telegram.org](https://my.telegram.org)
 - A bot token from [@BotFather](https://t.me/botfather)
 - A Git repository for your Zola blog

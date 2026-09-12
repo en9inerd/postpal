@@ -226,8 +226,7 @@ func (h *Handlers) downloadMedia(ctx context.Context, api *tg.Client, msg *tg.Me
 		}
 
 		if isVideo && len(doc.Thumbs) > 0 {
-			loc := doc.AsInputDocumentFileLocation()
-			loc.ThumbSize = doc.Thumbs[0].GetType()
+			loc := doc.AsInputDocumentFileLocation(doc.Thumbs[0].GetType())
 
 			if _, err := d.Download(api, loc).Stream(ctx, &buf); err != nil {
 				return nil, fmt.Errorf("failed to download video thumb: %w", err)

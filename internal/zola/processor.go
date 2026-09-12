@@ -142,7 +142,7 @@ func ExtractTitle(content string, channelID string) string {
 		return channelID + " [" + addr + "]"
 	}
 
-	firstLine := strings.SplitN(content, "\n", 2)[0]
+	firstLine, _, _ := strings.Cut(content, "\n")
 	firstLine = stripHTMLTags(firstLine)
 	firstLine = html.UnescapeString(firstLine)
 	firstLine = strings.TrimSpace(firstLine)

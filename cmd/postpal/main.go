@@ -119,7 +119,10 @@ func run(ctx context.Context, args []string, getenv func(string) string) error {
 		logger.Info("resolved identifiers", "channel_id", channel.ID, "channel_username", channel.Username, "channel_title", channel.Title, "author_id", author.ID)
 
 		postsDir := filepath.Join(cfg.GitRepoDir, cfg.ZolaPostsDir)
-		channelName := channel.Title
+		channelName := channel.Username
+		if channelName == "" {
+			channelName = channel.Title
+		}
 		if channelName == "" {
 			channelName = strconv.FormatInt(channel.ID, 10)
 		}
